@@ -1,0 +1,45 @@
+{
+  "name": "bouch-plugins",
+  "owner": {
+    "name": "Paul Boucherat",
+    "email": "paul@bouch.dev"
+  },
+  "metadata": {
+    "description": "UK-specific Claude Code plugins for property investors, solicitors, small business owners, and project managers. Real SKILL.md format, MCP-backed where relevant, cross-checked against Anthropic's official agent skill standard.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "foundations",
+      "source": "./plugins/foundations",
+      "description": "The BOUCH Skills Foundations pack — 10 curated Claude skills. Seven MCP-backed via Ledgerhall (property, legal, DD), three standalone (humaniser, bouch-voice, workflow-auditor).",
+      "version": "1.0.0",
+      "author": {
+        "name": "Paul Boucherat",
+        "email": "paul@bouch.dev"
+      },
+      "homepage": "https://bouch.dev",
+      "repository": "https://github.com/paulieb89/bouch-plugins",
+      "license": "MIT",
+      "category": "skills",
+      "tags": ["skills", "uk", "property", "consulting", "foundations", "bouch"],
+      "keywords": ["claude-skills", "agent-skills", "uk-business", "mcp", "bouch"]
+    },
+    {
+      "name": "property",
+      "source": "./plugins/property",
+      "description": "UK property investment plugin — 7 skills backed by real Land Registry, Rightmove, and EPC data. Full analysis, deal screening, BUY/WATCH/PASS verdicts, motivated-seller finder.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Paul Boucherat",
+        "email": "paul@bouch.dev"
+      },
+      "homepage": "https://bouch.dev/tools/property-report",
+      "repository": "https://github.com/paulieb89/bouch-plugins",
+      "license": "MIT",
+      "category": "skills",
+      "tags": ["uk-property", "buy-to-let", "rightmove", "land-registry", "property-investment"],
+      "keywords": ["uk-property", "buy-to-let", "property-investment", "rightmove", "land-registry", "epc", "rental-yield", "claude-skills"]
+    }
+  ]
+}

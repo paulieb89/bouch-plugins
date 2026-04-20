@@ -1,0 +1,23 @@
+{
+  "name": "property",
+  "description": "UK property investment plugin for Claude Code. Real Land Registry comparable sales, Rightmove listings, EPC ratings, and rental data. Full analysis, deal screening, BUY/WATCH/PASS verdicts, and investment summaries for UK residential property.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Paul Boucherat",
+    "email": "paul@bouch.dev"
+  },
+  "homepage": "https://bouch.dev/tools/property-report",
+  "repository": "https://github.com/paulieb89/bouch-plugins",
+  "license": "MIT",
+  "keywords": [
+    "uk-property",
+    "buy-to-let",
+    "property-investment",
+    "rightmove",
+    "land-registry",
+    "epc",
+    "rental-yield",
+    "claude-skills"
+  ],
+  "mcpServers": "./.mcp.json"
+}

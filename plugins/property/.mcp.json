@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "property": {
+      "type": "http",
+      "url": "https://property-shared.fly.dev/mcp"
+    }
+  }
+}

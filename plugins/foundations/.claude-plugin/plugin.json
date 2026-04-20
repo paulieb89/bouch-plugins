@@ -1,0 +1,21 @@
+{
+  "name": "foundations",
+  "description": "BOUCH Skills Foundations — 10 curated Claude skills demonstrating distinct patterns. Seven MCP-backed via Ledgerhall, three standalone.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Paul Boucherat",
+    "email": "paul@bouch.dev"
+  },
+  "homepage": "https://bouch.dev",
+  "repository": "https://github.com/paulieb89/bouch-plugins",
+  "license": "MIT",
+  "keywords": [
+    "claude-skills",
+    "agent-skills",
+    "uk-business",
+    "mcp",
+    "bouch",
+    "foundations"
+  ],
+  "mcpServers": "./.mcp.json"
+}

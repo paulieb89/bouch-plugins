@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ledgerhall": {
+      "type": "http",
+      "url": "https://uk-business-mcp.fly.dev/mcp"
+    }
+  }
+}
