@@ -5,6 +5,8 @@ UK-specific Claude Code plugins for property investors, solicitors, small busine
 **Marketplace name:** `bouch-plugins`
 **Home:** https://github.com/paulieb89/bouch-plugins
 
+> 📘 **Free guide included.** The ~35-page [BOUCH Skills Guide](guide/) walks through writing your first skill, wiring MCP, and shipping a plugin. Markdown + PDF, CC BY-NC 4.0. Free to share and adapt with attribution.
+
 ---
 
 ## Quick install
