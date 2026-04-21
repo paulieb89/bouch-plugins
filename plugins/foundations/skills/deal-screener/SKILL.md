@@ -13,15 +13,15 @@ metadata:
   author: bouch
   version: "2.0"
 allowed-tools:
-  - mcp__property__rightmove_listing
-  - mcp__property__property_comps
-  - mcp__property__rental_analysis
-  - mcp__property__rightmove_search
-  - mcp__property__property_yield
-  - mcp__property__stamp_duty
-  - mcp__property__property_epc
-  - mcp__property__property_blocks
-  - mcp__property__company_search
+  - mcp__claude_ai_property__rightmove_listing
+  - mcp__claude_ai_property__property_comps
+  - mcp__claude_ai_property__rental_analysis
+  - mcp__claude_ai_property__rightmove_search
+  - mcp__claude_ai_property__property_yield
+  - mcp__claude_ai_property__stamp_duty
+  - mcp__claude_ai_property__property_epc
+  - mcp__claude_ai_property__property_blocks
+  - mcp__claude_ai_property__company_search
   - Bash
 ---
 
@@ -58,6 +58,38 @@ If the property is a flat or apartment, call `property_blocks` to check building
 ### Step 7: Apply underwriting criteria
 
 Score each signal against the thresholds in `assets/underwriting-criteria.json`. See `references/underwriting-logic.md` for decision rules, flat-specific checks, and the rationale behind conservative defaults.
+
+You can score manually (walk through each threshold in your output) or use `scripts/compute_verdict.py` for a deterministic run. The script takes a JSON file of raw MCP data, not command-line flags.
+
+**Exact invocation:**
+```bash
+# Write the collected data to a temp file (field names must match exactly)
+cat > /tmp/deal-raw.json <<'EOF'
+{
+  "user_inputs": {"asking_price": 135000},
+  "property_yield": {"gross_yield_pct": 7.56},
+  "property_comps": {"median": 155000, "count": 8},
+  "rightmove_search_rent": {"count": 25},
+  "rightmove_listing": {"tenure": "freehold"},
+  "property_epc": {"rating": "D"}
+}
+EOF
+
+python3 scripts/compute_verdict.py \
+  --input /tmp/deal-raw.json \
+  --criteria assets/underwriting-criteria.json
+```
+
+**Required JSON field paths** (use these exact names or the script silently gets nulls):
+- `user_inputs.asking_price` — integer, asking price in £
+- `property_yield.gross_yield_pct` — float, e.g. 7.56 for 7.56%
+- `property_comps.median` — integer, median comp price in £
+- `property_comps.count` — integer, number of comp transactions
+- `rightmove_search_rent.count` — integer, live rental listings found
+- `rightmove_listing.tenure` — "freehold" or "leasehold"
+- `rightmove_listing.annual_service_charge` — integer (leasehold only)
+- `rightmove_listing.lease_remaining_years` — integer (leasehold only)
+- `property_epc.rating` — string, "A" through "G"
 
 ### Step 8: Write the output
 

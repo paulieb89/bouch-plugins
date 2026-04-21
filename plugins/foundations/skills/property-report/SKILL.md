@@ -13,17 +13,17 @@ metadata:
   author: bouch
   version: "2.0"
 allowed-tools:
-  - mcp__property__property_comps
-  - mcp__property__property_epc
-  - mcp__property__rental_analysis
-  - mcp__property__rightmove_search
-  - mcp__property__rightmove_listing
-  - mcp__property__property_yield
-  - mcp__property__stamp_duty
-  - mcp__property__property_report
-  - mcp__property__property_blocks
-  - mcp__property__company_search
-  - mcp__property__planning_search
+  - mcp__claude_ai_property__property_comps
+  - mcp__claude_ai_property__property_epc
+  - mcp__claude_ai_property__rental_analysis
+  - mcp__claude_ai_property__rightmove_search
+  - mcp__claude_ai_property__rightmove_listing
+  - mcp__claude_ai_property__property_yield
+  - mcp__claude_ai_property__stamp_duty
+  - mcp__claude_ai_property__property_report
+  - mcp__claude_ai_property__property_blocks
+  - mcp__claude_ai_property__company_search
+  - mcp__claude_ai_property__planning_search
   - Bash
   - Read
   - Write
@@ -101,6 +101,13 @@ Before calling any tool, decide which lane the query fits. Don't chain every too
 - Output: 2-3 sentence answer with inline stats. No template, no verdict.
 
 Default to Lane B for vague postcode queries. Lane A needs a street address.
+
+### Known tool behaviours to handle
+
+- **`property_report` (aggregate tool) rejects postcode-only input** — it requires a street address + postcode. For postcode-only queries, call `property_comps` / `property_yield` / `rental_analysis` individually instead (Lane B).
+- **`property_yield` with `property_type` filter can return null rent** if there are too few type-matched rental listings. If the filtered call returns `"median_monthly_rent": null`, retry without the type filter and use the blended sector result, noting the fallback in the output.
+- **`property_epc` matches by postcode + nearest address** — if the returned certificate's floor area or property type doesn't match the listing, flag as a potential wrong-certificate match. Do not treat a mismatched EPC as ground truth.
+- **Blended `property_comps`** — a sector-level median without a `property_type` filter blends all stock (flats, semis, detacheds). When the listing is a specific type, always filter (`property_type=T` for terraced, etc.) so the premium/discount calculation is like-for-like. Call out the blended baseline if you could not filter.
 
 ## Workflow (Lane A — the full report)
 
