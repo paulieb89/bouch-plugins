@@ -1,0 +1,24 @@
+{
+  "name": "legal-os",
+  "version": "1.0.0",
+  "description": "BOUCH Legal OS — 7 Claude skills for UK legal research. Legislation lookup, case law, HMRC/VAT, parliamentary intent, MP research, full legal briefs with OSCOLA citations. MCP-backed via Ledgerhall.",
+  "author": {
+    "name": "Paul Boucherat",
+    "email": "paul@bouch.dev"
+  },
+  "homepage": "https://bouch.dev",
+  "repository": "https://github.com/paulieb89/bouch-plugins",
+  "license": "MIT",
+  "keywords": [
+    "agent-skills",
+    "uk-legal",
+    "legislation",
+    "case-law",
+    "hmrc",
+    "vat",
+    "oscola",
+    "bouch"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

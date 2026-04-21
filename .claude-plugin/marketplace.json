@@ -40,6 +40,22 @@
       "category": "skills",
       "tags": ["uk-property", "buy-to-let", "rightmove", "land-registry", "property-investment"],
       "keywords": ["uk-property", "buy-to-let", "property-investment", "rightmove", "land-registry", "epc", "rental-yield", "claude-skills"]
+    },
+    {
+      "name": "legal-os",
+      "source": "./plugins/legal-os",
+      "description": "BOUCH Legal OS — 7 skills for UK legal research. Legislation lookup, case law, HMRC/VAT, parliamentary intent, MP research, full legal briefs with OSCOLA citations. MCP-backed via Ledgerhall.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Paul Boucherat",
+        "email": "paul@bouch.dev"
+      },
+      "homepage": "https://bouch.dev",
+      "repository": "https://github.com/paulieb89/bouch-plugins",
+      "license": "MIT",
+      "category": "skills",
+      "tags": ["uk-legal", "legislation", "case-law", "hmrc", "vat", "oscola", "parliament"],
+      "keywords": ["uk-legal", "legislation", "case-law", "hmrc-guidance", "vat", "oscola", "hansard", "claude-skills", "agent-skills"]
     }
   ]
 }
