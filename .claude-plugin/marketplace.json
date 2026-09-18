@@ -5,7 +5,7 @@
     "email": "paul@bouch.dev"
   },
   "metadata": {
-    "description": "UK-specific Claude Code plugins for property investors, solicitors, small business owners, and project managers. Real SKILL.md format, MCP-backed where relevant, cross-checked against Anthropic's official agent skill standard.",
+    "description": "Bouch Claude Code plugins: portable agent-development methodology and domain knowledge (bouch-agent-core, bouch-audio, sourced from their own repositories), plus UK-specific skill packs for property investors, solicitors, small business owners, and project managers. Real SKILL.md format, MCP-backed where relevant.",
     "version": "0.1.0"
   },
   "plugins": [
@@ -62,8 +62,8 @@
       "source": {
         "source": "github",
         "repo": "paulieb89/bouch-agent-core",
-        "ref": "v0.2-portable-core-two-domain",
-        "sha": "7891ba596538165b58c20358ea85d6631124d492"
+        "ref": "v0.2.1",
+        "sha": "fa2f841ea0acab39de121cd8a55b4ea05419f4eb"
       },
       "description": "Portable cross-domain agent-development methodology: harness-extension discipline, environment recon, /prime authoring contract, and evidence-freeze practice. Canonical source: paulieb89/bouch-agent-core.",
       "author": {
