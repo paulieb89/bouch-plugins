@@ -73,6 +73,22 @@ The BOUCH Skills Foundations pack. 10 curated skills demonstrating distinct patt
 
 All skills follow the open [Agent Skills specification](https://agentskills.io/specification) and are portable across any compliant agent (35+ listed at [agentskills.io/clients](https://agentskills.io/clients)) — Claude Code, claude.ai, Codex, Cursor, Gemini CLI, GitHub Copilot, VS Code, Goose, Roo Code, and others. None of them are prompt templates dressed up as skills.
 
+---
+
+### bouch-agent-core and bouch-audio (external sources)
+
+These two are listed here for installation only. Their Skills and knowledge live in their own repositories, and each marketplace entry pins a qualified release tag and commit there.
+
+| Plugin | Canonical source | What it is |
+|--------|------------------|------------|
+| `bouch-agent-core` | [paulieb89/bouch-agent-core](https://github.com/paulieb89/bouch-agent-core) | Portable agent-development methodology: harness extension, environment recon, `/prime` authoring, evidence freeze |
+| `bouch-audio` | [paulieb89/bouch-audio](https://github.com/paulieb89/bouch-audio) | Portable audio production knowledge: electronic production, mixing and mastering, audio verification |
+
+```
+/plugin install bouch-agent-core@bouch-plugins
+/plugin install bouch-audio@bouch-plugins
+```
+
 ## Directory structure
 
 ```

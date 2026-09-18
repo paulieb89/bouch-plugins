@@ -56,6 +56,38 @@
       "category": "skills",
       "tags": ["uk-legal", "legislation", "case-law", "hmrc", "vat", "oscola", "parliament"],
       "keywords": ["uk-legal", "legislation", "case-law", "hmrc-guidance", "vat", "oscola", "hansard", "claude-skills", "agent-skills"]
+    },
+    {
+      "name": "bouch-agent-core",
+      "source": {
+        "source": "github",
+        "repo": "paulieb89/bouch-agent-core",
+        "ref": "v0.2-portable-core-two-domain",
+        "sha": "7891ba596538165b58c20358ea85d6631124d492"
+      },
+      "description": "Portable cross-domain agent-development methodology: harness-extension discipline, environment recon, /prime authoring contract, and evidence-freeze practice. Canonical source: paulieb89/bouch-agent-core.",
+      "author": {
+        "name": "Paul Boucherat",
+        "email": "paul@bouch.dev"
+      },
+      "repository": "https://github.com/paulieb89/bouch-agent-core",
+      "category": "development"
+    },
+    {
+      "name": "bouch-audio",
+      "source": {
+        "source": "github",
+        "repo": "paulieb89/bouch-audio",
+        "ref": "v0.1.0-experimental",
+        "sha": "21bebe8e691a899c7a3f70485f646b429bec3082"
+      },
+      "description": "Portable, evidence-tiered audio production knowledge: electronic production, mixing and mastering, and audio verification. DAW-independent. Canonical source: paulieb89/bouch-audio.",
+      "author": {
+        "name": "Paul Boucherat",
+        "email": "paul@bouch.dev"
+      },
+      "repository": "https://github.com/paulieb89/bouch-audio",
+      "category": "skills"
     }
   ]
 }
