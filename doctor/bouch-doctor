@@ -1,0 +1,702 @@
+#!/usr/bin/env python3
+"""Read-only check that this host matches the Bouch runtime architecture.
+
+The architecture, not a snapshot of it:
+
+  - bouch-agent-core (installed from the bouch-plugins marketplace) and the
+    Bouch Registry MCP server are the only Bouch capabilities that are
+    user-wide, together with a generic Registry routing rule in the user
+    CLAUDE.md.
+  - Domain knowledge is reached on demand through the Registry, not by
+    installing domain plugins user-wide.
+  - Workbench and adapter capabilities stay inside their projects.
+
+Expected names, versions, commits and capability sets come from the
+marketplace, the Registry and Claude Code itself. The only local input is
+where repositories are checked out, because the Registry deliberately stores
+no machine paths:
+
+    ~/.config/bouch/doctor.json   {"checkouts": {"<repository>": "<path>", ...}}
+    --checkout <repository>=<path>   (repeatable; overrides the file)
+
+Default mode checks local state and the live Registry and takes seconds.
+--full also reads every declared Registry entrypoint, runs the registry's own
+`verify-sources --remote` when its checkout is known, and starts fresh
+headless Claude sessions in a neutral directory and in each workbench to
+compare their capability surfaces. --full uses API credit.
+
+Nothing is written, fetched into, installed or repaired. Exit status is 1 if
+any check fails.
+"""
+
+import argparse
+import json
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import tomllib
+import urllib.request
+from pathlib import Path
+
+HOST_PLUGIN = "bouch-agent-core"
+MARKETPLACE = "bouch-plugins"
+REGISTRY_SERVER = "bouch-registry"
+REGISTRY_URL = "https://registry.bouch.dev/mcp"
+ROUTING_MARKER = "bouch registry"
+
+HOME = Path.home()
+CLAUDE_DIR = HOME / ".claude"
+CONFIG = HOME / ".config" / "bouch" / "doctor.json"
+
+
+# ---------------------------------------------------------------- reporting
+
+
+class Report:
+    def __init__(self):
+        self.fails = 0
+        self.warns = 0
+
+    def section(self, title):
+        print(f"\n{title}")
+
+    def _line(self, mark, msg):
+        print(f"  {mark} {msg}")
+
+    def ok(self, msg):
+        self._line("✓", msg)
+
+    def fail(self, msg):
+        self.fails += 1
+        self._line("✗", msg)
+
+    def warn(self, msg):
+        self.warns += 1
+        self._line("!", msg)
+
+    def info(self, msg):
+        self._line("·", msg)
+
+
+# ------------------------------------------------------------------ helpers
+
+
+def run(cmd, cwd=None, timeout=120):
+    try:
+        p = subprocess.run(
+            cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout,
+            stdin=subprocess.DEVNULL,
+        )
+        return p.returncode, p.stdout, p.stderr
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, "", str(e)
+
+
+def git(path, *args):
+    rc, out, _ = run(["git", "-C", str(path), *args])
+    return out.strip() if rc == 0 else None
+
+
+def norm_url(url):
+    if not url:
+        return None
+    url = url.strip().rstrip("/")
+    url = re.sub(r"^git@github\.com:", "https://github.com/", url)
+    return re.sub(r"\.git$", "", url).lower()
+
+
+def github_url(repo):
+    return f"https://github.com/{repo}"
+
+
+def ls_remote(url, ref):
+    """Commit a ref resolves to on a remote (annotated tags peeled), or None."""
+    rc, out, _ = run(["git", "ls-remote", url, ref, f"refs/tags/{ref}^{{}}"], timeout=60)
+    if rc != 0:
+        return None
+    rows = dict(reversed(line.split("\t")) for line in out.splitlines() if "\t" in line)
+    for name in (f"refs/tags/{ref}^{{}}", f"refs/tags/{ref}", f"refs/heads/{ref}", ref):
+        if name in rows:
+            return rows[name]
+    return None
+
+
+def load_json(path, default=None):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return default
+
+
+class Registry:
+    """Minimal MCP client for the Registry's stateless streamable-HTTP endpoint."""
+
+    def __init__(self, url):
+        self.url = url
+        self.server_info = None
+        self._id = 0
+
+    def rpc(self, method, params=None):
+        self._id += 1
+        body = json.dumps({"jsonrpc": "2.0", "id": self._id, "method": method,
+                           "params": params or {}}).encode()
+        req = urllib.request.Request(self.url, data=body, headers={
+            "content-type": "application/json",
+            "accept": "application/json, text/event-stream",
+        })
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            text = resp.read().decode()
+        if text.lstrip().startswith("{"):
+            msg = json.loads(text)
+        else:
+            data = [line[5:].strip() for line in text.splitlines() if line.startswith("data:")]
+            msg = json.loads(data[-1])
+        if "error" in msg:
+            raise RuntimeError(msg["error"].get("message", msg["error"]))
+        return msg["result"]
+
+    def initialize(self):
+        result = self.rpc("initialize", {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "bouch-doctor", "version": "1"},
+        })
+        self.server_info = result.get("serverInfo", {})
+        return result
+
+    def tool(self, name, **arguments):
+        result = self.rpc("tools/call", {"name": name, "arguments": arguments})
+        if result.get("isError"):
+            text = " ".join(c.get("text", "") for c in result.get("content", []))
+            raise RuntimeError(text.strip() or f"{name} failed")
+        if "structuredContent" in result:
+            return result["structuredContent"]
+        return json.loads(result["content"][0]["text"])
+
+
+def workbench_surface(path):
+    """Capabilities a workbench defines for itself, read from its own files."""
+    path = Path(path)
+    skills = {p.parent.name for p in path.glob(".claude/skills/*/SKILL.md")}
+    commands = {p.stem for p in path.glob(".claude/commands/*.md")}
+    servers = set((load_json(path / ".mcp.json", {}) or {}).get("mcpServers", {}))
+    return {"skills": skills, "commands": commands, "servers": servers}
+
+
+def mcp_get(name, cwd):
+    rc, out, err = run(["claude", "mcp", "get", name], cwd=cwd, timeout=90)
+    return rc, out + err
+
+
+def session_surface(cwd):
+    """Start a fresh, unsaved headless session and return its init event."""
+    rc, out, err = run([
+        "claude", "-p", "Reply with just OK.", "--output-format", "stream-json",
+        "--verbose", "--no-session-persistence", "--max-turns", "1",
+        "--permission-mode", "default",
+    ], cwd=cwd, timeout=300)
+    for line in out.splitlines():
+        if line.startswith("{"):
+            event = json.loads(line)
+            if event.get("type") == "system" and event.get("subtype") == "init":
+                return event
+    raise RuntimeError((err or out).strip()[:300] or "no init event")
+
+
+# ------------------------------------------------------------------- checks
+
+
+def check_host(r, ctx):
+    r.section("BOUCH HOST")
+
+    # Core: installed from the marketplace, user scope, at the pinned commit.
+    markets = load_json(CLAUDE_DIR / "plugins" / "known_marketplaces.json", {}) or {}
+    market = markets.get(MARKETPLACE)
+    pin = None
+    if not market:
+        r.fail(f"marketplace {MARKETPLACE} is not registered")
+    else:
+        loc = Path(market.get("installLocation", ""))
+        catalog = load_json(loc / ".claude-plugin" / "marketplace.json", {}) or {}
+        ctx["catalog"] = catalog
+        entry = next((p for p in catalog.get("plugins", []) if p.get("name") == HOST_PLUGIN), None)
+        if not entry:
+            r.fail(f"{MARKETPLACE} does not list {HOST_PLUGIN}")
+        else:
+            pin = entry["source"].get("sha") if isinstance(entry.get("source"), dict) else None
+        src = market.get("source", {})
+        if src.get("source") == "github":
+            remote_head = ls_remote(github_url(src["repo"]), "HEAD")
+            local_head = git(loc, "rev-parse", "HEAD")
+            if remote_head and local_head and remote_head != local_head:
+                r.warn(f"local {MARKETPLACE} catalog is behind its remote "
+                       "(claude plugin marketplace update would refresh it)")
+
+    rc, out, _ = run(["claude", "plugin", "list", "--json"])
+    plugins = json.loads(out) if rc == 0 else []
+    ctx["plugins"] = plugins
+    host_id = f"{HOST_PLUGIN}@{MARKETPLACE}"
+    host = next((p for p in plugins if p["id"] == host_id and p.get("scope") == "user"), None)
+    installed = (load_json(CLAUDE_DIR / "plugins" / "installed_plugins.json", {}) or {}).get("plugins", {})
+    rec = next((i for i in installed.get(host_id, []) if i.get("scope") == "user"), {})
+    if not host:
+        r.fail(f"{host_id} is not installed at user scope")
+    elif not host.get("enabled"):
+        r.fail(f"{host_id} is installed but disabled")
+    elif pin and rec.get("gitCommitSha") != pin:
+        r.fail(f"{host_id} {host.get('version')} is at {str(rec.get('gitCommitSha'))[:12]}, "
+               f"but the marketplace pins {pin[:12]}")
+    else:
+        ctx["host_install"] = Path(host["installPath"])
+        r.ok(f"Core installed correctly: {host_id} {host.get('version')}, user scope, "
+             f"enabled{', at the marketplace pin ' + pin[:12] if pin else ''}")
+
+    # Registry: configured at user scope, connected, and actually the Registry.
+    with tempfile.TemporaryDirectory(prefix="bouch-doctor-") as neutral:
+        reg_out = mcp_get(REGISTRY_SERVER, neutral)[1]
+    reg = ctx["registry"]
+    try:
+        reg.initialize()
+    except Exception as e:  # noqa: BLE001 - reported, not raised
+        reg.server_info = None
+        ctx["registry_error"] = str(e)
+    problems = []
+    if "User config" not in reg_out:
+        problems.append("not configured at user scope")
+    if "Connected" not in reg_out:
+        problems.append("not connected")
+    if REGISTRY_URL not in reg_out:
+        problems.append(f"URL is not {REGISTRY_URL}")
+    if not reg.server_info or reg.server_info.get("name") != REGISTRY_SERVER:
+        problems.append(f"endpoint did not identify as {REGISTRY_SERVER} "
+                        f"({ctx.get('registry_error', reg.server_info)})")
+    if problems:
+        r.fail(f"Registry: {'; '.join(problems)}")
+    else:
+        r.ok(f"Registry configured and healthy: user scope, {REGISTRY_URL}, "
+             f"{reg.server_info.get('name')} {reg.server_info.get('version', '')}".rstrip())
+
+    # Generic routing contract in the user CLAUDE.md.
+    claude_md = CLAUDE_DIR / "CLAUDE.md"
+    text = claude_md.read_text() if claude_md.exists() else ""
+    if ROUTING_MARKER in text.lower():
+        r.ok("generic Registry routing contract present in ~/.claude/CLAUDE.md")
+    else:
+        r.fail("~/.claude/CLAUDE.md has no Bouch Registry routing rule")
+
+
+def load_records(r, ctx):
+    """Every record the live Registry lists, keyed by id."""
+    reg = ctx["registry"]
+    records, domains = {}, []
+    if not reg.server_info:
+        return records, domains
+    try:
+        domains = reg.tool("list_domains")["domains"]
+        for d in domains:
+            for cid in d.get("capability_ids", []):
+                if cid not in records:
+                    records[cid] = reg.tool("get_capability", id=cid)
+    except Exception as e:  # noqa: BLE001
+        ctx["records_error"] = str(e)
+    return records, domains
+
+
+def check_shadows(r, ctx):
+    records = ctx["records"]
+    domain_plugins = {}
+    for cid, rec in records.items():
+        if rec.get("type") == "agent-plugin" and rec["source"]["repository"] != HOST_PLUGIN:
+            for name in {rec["source"]["repository"], rec.get("title")}:
+                if name:
+                    domain_plugins[name] = cid
+
+    accidental, local_only = [], []
+    for p in ctx.get("plugins", []):
+        name, _, market = p["id"].partition("@")
+        is_domain = name in domain_plugins or (market == MARKETPLACE and name != HOST_PLUGIN)
+        if not is_domain:
+            continue
+        if p.get("scope") == "user" and p.get("enabled"):
+            accidental.append(p["id"])
+        else:
+            local_only.append(f"{p['id']} ({p.get('scope')})")
+
+    # Names that belong to Core, to domain packages or to workbenches must not
+    # be shadowed by copies in the user Skills directory.
+    protected = {}
+    host_install = ctx.get("host_install")
+    if host_install:
+        for s in host_install.glob("skills/*/SKILL.md"):
+            protected[s.parent.name] = HOST_PLUGIN
+    for cid, rec in records.items():
+        for ep in rec.get("entrypoints", []):
+            m = re.fullmatch(r"(?:\.claude/)?skills/([^/]+)/SKILL\.md", ep["path"])
+            if m:
+                protected[m.group(1)] = cid
+    for repo, wb in ctx["workbenches"].items():
+        for s in wb["surface"]["skills"]:
+            protected[s] = repo
+    user_skills = {p.name for p in (CLAUDE_DIR / "skills").glob("*")
+                   if p.is_dir() and not p.name.startswith(".") and p.name != "synced"}
+    shadows = sorted(f"{s} (owned by {protected[s]})" for s in user_skills & set(protected))
+
+    if accidental:
+        r.fail(f"domain plugins installed user-wide: {', '.join(accidental)}")
+    if shadows:
+        r.fail(f"user Skills shadow Bouch-owned Skills: {', '.join(shadows)}")
+    if not accidental and not shadows:
+        r.ok("no accidental domain plugins or shadow Skills")
+    for item in local_only:
+        r.info(f"domain plugin installed outside user scope: {item}")
+
+
+def check_remote(r, ctx, full):
+    r.section("REMOTE KNOWLEDGE")
+    reg, records, domains = ctx["registry"], ctx["records"], ctx["domains"]
+    if not reg.server_info:
+        r.fail("Registry unreachable; remote knowledge not checked")
+        return
+    if ctx.get("records_error") or not records:
+        r.fail(f"Registry records did not resolve: {ctx.get('records_error', 'none listed')}")
+        return
+
+    inconsistent = [
+        f"{cid} in {d['id']}" for d in domains for cid in d.get("capability_ids", [])
+        if records[cid].get("id") != cid or d["id"] not in records[cid].get("domains", [])
+    ]
+    if inconsistent:
+        r.fail(f"Registry records disagree with their domains: {', '.join(inconsistent)}")
+    else:
+        r.ok(f"Registry records resolve: {len(records)} records in {len(domains)} domains, "
+             "each consistent with the domains that list it")
+
+    # Durable refs: record refs and marketplace pins must resolve on their remotes.
+    resolved, bad = {}, []
+    for cid, rec in sorted(records.items()):
+        src = rec["source"]
+        if src.get("url") and src.get("ref"):
+            commit = ls_remote(src["url"], src["ref"])
+            resolved[cid] = commit
+            if not commit:
+                bad.append(f"{cid}: {src['ref']} not found on {src['url']}")
+    for entry in ctx.get("catalog", {}).get("plugins", []):
+        src = entry.get("source")
+        if isinstance(src, dict) and src.get("source") == "github" and src.get("ref"):
+            commit = ls_remote(github_url(src["repo"]), src["ref"])
+            if commit is None:
+                bad.append(f"{MARKETPLACE}/{entry['name']}: {src['ref']} not found")
+            elif src.get("sha") and commit != src["sha"]:
+                bad.append(f"{MARKETPLACE}/{entry['name']}: {src['ref']} now points at "
+                           f"{commit[:12]}, pin is {src['sha'][:12]}")
+    if bad:
+        for b in bad:
+            r.fail(f"durable ref: {b}")
+    else:
+        r.ok(f"durable refs resolve: {len(resolved)} Registry refs and the "
+             f"{MARKETPLACE} pins match their remotes")
+    for cid, rec in sorted(records.items()):
+        if rec["source"].get("url") and not rec["source"].get("ref"):
+            r.info(f"{cid} follows its remote HEAD (no durable ref)")
+
+    # Declared entrypoints of published records: one per record by default,
+    # every one with --full. Records without a published source are metadata
+    # only and are not expected to be remote-readable.
+    published = {cid: rec for cid, rec in records.items() if rec["source"].get("url")}
+    unreadable, reads = [], 0
+    for cid, rec in sorted(published.items()):
+        eps = rec.get("entrypoints", [])
+        for ep in (eps if full else eps[:1]):
+            reads += 1
+            try:
+                doc = reg.tool("read_capability_entrypoint", capability_id=cid, entrypoint=ep["path"])
+                expect = resolved.get(cid)
+                if expect and doc.get("commit") != expect:
+                    unreadable.append(f"{cid}:{ep['path']} served from {doc.get('commit', '?')[:12]}, "
+                                      f"ref resolves to {expect[:12]}")
+            except Exception as e:  # noqa: BLE001
+                unreadable.append(f"{cid}:{ep['path']} ({str(e)[:120]})")
+    scope = "every declared entrypoint" if full else "first declared entrypoint of each record"
+    if unreadable:
+        for u in unreadable:
+            r.fail(f"entrypoint unreadable: {u}")
+    else:
+        r.ok(f"declared knowledge entrypoints readable ({scope} of {len(published)} "
+             f"published records, {reads} reads)")
+
+    if full:
+        checkout = ctx["checkouts"].get(REGISTRY_SERVER)
+        if not checkout:
+            r.warn(f"no {REGISTRY_SERVER} checkout mapped; verify-sources --remote not run")
+        else:
+            for args, label in ((["validate"], "registry validate"),
+                                (["verify-sources", "--remote"], "remote source verification")):
+                rc, out, err = run(["uv", "run", "--quiet", "bouch-registry", *args],
+                                   cwd=checkout, timeout=600)
+                if rc == 0:
+                    r.ok(f"{label} passes")
+                else:
+                    tail = (out + err).strip().splitlines()[-3:]
+                    r.fail(f"{label} failed: {' | '.join(tail)}")
+
+
+def check_isolation(r, ctx, full):
+    r.section("PROJECT ISOLATION")
+    workbenches = ctx["workbenches"]
+    if not workbenches:
+        r.warn("no reference-workbench checkout mapped; isolation checked for the host only")
+
+    user_servers = set((load_json(HOME / ".claude.json", {}) or {}).get("mcpServers", {}))
+    user_commands = {p.stem for p in (CLAUDE_DIR / "commands").glob("*.md")}
+    leaks = []
+    for repo, wb in workbenches.items():
+        s = wb["surface"]
+        leaks += [f"{repo} MCP server '{n}' is also user-scope" for n in s["servers"] & user_servers]
+        leaks += [f"{repo} command '/{n}' is also a user command" for n in s["commands"] & user_commands]
+        # A workbench capability defined in an ancestor directory would load in
+        # every sibling project too. The home directory's .claude is user config.
+        for anc in Path(wb["path"]).resolve().parents:
+            for name in ("CLAUDE.md", "CLAUDE.local.md", ".mcp.json", ".claude/skills",
+                         ".claude/commands", ".claude/settings.json"):
+                if anc == HOME and name.startswith(".claude/"):
+                    continue
+                if (anc / name).exists():
+                    leaks.append(f"{anc / name} is shared by everything under {anc}")
+
+    with tempfile.TemporaryDirectory(prefix="bouch-doctor-") as neutral:
+        for repo, wb in workbenches.items():
+            for server in sorted(wb["surface"]["servers"]):
+                rc, out = mcp_get(server, neutral)
+                if "No MCP server named" not in out:
+                    leaks.append(f"{repo} MCP server '{server}' resolves in a neutral directory")
+        neutral_init = None
+        if full:
+            try:
+                neutral_init = session_surface(neutral)
+            except Exception as e:  # noqa: BLE001
+                r.fail(f"neutral session probe failed: {e}")
+
+    if leaks:
+        for leak in leaks:
+            r.fail(f"leak: {leak}")
+    else:
+        r.ok("neutral project contains no workbench capabilities")
+
+    for repo, wb in workbenches.items():
+        path, s = wb["path"], wb["surface"]
+        settings = {}
+        for f in ("settings.json", "settings.local.json"):
+            settings.update(load_json(Path(path) / ".claude" / f, {}) or {})
+        approved = set(settings.get("enabledMcpjsonServers", []))
+        unapproved = sorted(s["servers"] - approved) if not settings.get("enableAllProjectMcpServers") else []
+        if unapproved:
+            r.fail(f"{repo}: .mcp.json servers not approved in project settings: {', '.join(unapproved)}")
+        else:
+            r.ok(f"{repo} defines its own capabilities: {len(s['skills'])} Skills, "
+                 f"commands {sorted('/' + c for c in s['commands'])}, servers {sorted(s['servers'])}")
+
+    if not full:
+        return
+    host_skills = set()
+    if neutral_init:
+        skills = set(neutral_init.get("skills", []))
+        plugins = {p["name"] for p in neutral_init.get("plugins", [])}
+        servers = {m["name"]: m["status"] for m in neutral_init.get("mcp_servers", [])}
+        tools = neutral_init.get("tools", [])
+        wb_all = set().union(*(w["surface"]["skills"] for w in workbenches.values())) if workbenches else set()
+        wb_servers = set().union(*(w["surface"]["servers"] for w in workbenches.values())) if workbenches else set()
+        problems = []
+        if HOST_PLUGIN not in plugins:
+            problems.append(f"{HOST_PLUGIN} not loaded")
+        if REGISTRY_SERVER not in servers:
+            problems.append(f"{REGISTRY_SERVER} not present")
+        if skills & wb_all:
+            problems.append(f"workbench Skills present: {sorted(skills & wb_all)}")
+        if any(t.split("__")[1] in wb_servers for t in tools if t.startswith("mcp__")):
+            problems.append("workbench MCP tools present")
+        domain = sorted(s for s in skills if s.split(":")[0] in ctx["domain_plugin_names"])
+        if domain:
+            problems.append(f"domain plugin Skills present: {domain}")
+        if problems:
+            r.fail(f"neutral session: {'; '.join(problems)}")
+        else:
+            host_skills = skills
+            r.ok(f"neutral session: {HOST_PLUGIN} and {REGISTRY_SERVER} present, no workbench "
+                 "or domain-plugin capabilities")
+
+    for repo, wb in workbenches.items():
+        try:
+            init = session_surface(wb["path"])
+        except Exception as e:  # noqa: BLE001
+            r.fail(f"{repo} session probe failed: {e}")
+            continue
+        s = wb["surface"]
+        skills = set(init.get("skills", []))
+        commands = set(init.get("slash_commands", []))
+        servers = {m["name"]: m["status"] for m in init.get("mcp_servers", [])}
+        problems = []
+        if neutral_init:
+            extra = skills - host_skills
+            if extra != s["skills"]:
+                problems.append(f"Skills added {sorted(extra)}, workbench defines {sorted(s['skills'])}")
+            extra_servers = set(servers) - {m["name"] for m in neutral_init.get("mcp_servers", [])}
+            if extra_servers != s["servers"]:
+                problems.append(f"servers added {sorted(extra_servers)}, workbench defines {sorted(s['servers'])}")
+        missing_cmds = s["commands"] - commands
+        if missing_cmds:
+            problems.append(f"commands missing: {sorted(missing_cmds)}")
+        if problems:
+            r.fail(f"{repo} session: {'; '.join(problems)}")
+        else:
+            r.ok(f"{repo} session adds only its intended project capabilities")
+        for name in s["servers"]:
+            if servers.get(name) not in (None, "connected"):
+                r.info(f"{repo} session: '{name}' was '{servers[name]}' at session start "
+                       "(startup timing; see adapter check for its real status)")
+
+
+def check_adapters(r, ctx):
+    r.section("ADAPTER / EVIDENCE")
+    records, checkouts = ctx["records"], ctx["checkouts"]
+
+    receipts = {}
+    for receipt in (HOME / ".local" / "share" / "uv" / "tools").glob("*/uv-receipt.toml"):
+        try:
+            tool = tomllib.loads(receipt.read_text())["tool"]
+        except (OSError, ValueError, KeyError):
+            continue
+        editable = {Path(req["editable"]).resolve() for req in tool.get("requirements", []) if "editable" in req}
+        for ep in tool.get("entrypoints", []):
+            receipts[Path(ep["install-path"]).resolve()] = editable
+
+    adapters = {rec["source"]["repository"]: (cid, rec) for cid, rec in records.items()
+                if rec.get("type") == "mcp-server"}
+    for repo, (cid, rec) in sorted(adapters.items()):
+        path = checkouts.get(repo)
+        if not path:
+            r.info(f"{cid}: no checkout mapped, adapter checkout not checked")
+            continue
+        problems = []
+        origin = norm_url(git(path, "remote", "get-url", "origin"))
+        if origin != norm_url(rec["source"].get("url")):
+            problems.append(f"origin is {origin}, record says {rec['source'].get('url')}")
+        branch = git(path, "rev-parse", "--abbrev-ref", "HEAD")
+        upstream = git(path, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
+        head = git(path, "rev-parse", "HEAD")
+        if not upstream or not upstream.startswith("origin/"):
+            problems.append(f"branch {branch} does not track origin")
+        else:
+            remote = ls_remote(origin or "", upstream.split("/", 1)[1])
+            pushed = remote == head or (
+                remote and run(["git", "-C", path, "merge-base", "--is-ancestor", head, remote])[0] == 0)
+            if not pushed:
+                problems.append(f"HEAD {head[:12]} is not on {upstream} remotely")
+        if git(path, "status", "--porcelain"):
+            r.warn(f"{cid}: uncommitted changes in {path}")
+        if problems:
+            r.fail(f"{cid} checkout: {'; '.join(problems)}")
+        else:
+            r.ok(f"{cid} checkout is durable and correctly tracked: {branch} → {upstream} ({origin})")
+
+    for cid, rec in sorted(records.items()):
+        if rec.get("type") != "evidence-repository":
+            continue
+        repo, ref = rec["source"]["repository"], rec["source"].get("ref")
+        path = checkouts.get(repo)
+        if not ref:
+            r.info(f"{cid} declares no freeze ref; not checked as frozen")
+            continue
+        if not path:
+            r.info(f"{cid}: no checkout mapped, freeze {ref} not checked")
+            continue
+        head, frozen = git(path, "rev-parse", "HEAD"), git(path, "rev-parse", f"{ref}^{{commit}}")
+        dirty = git(path, "status", "--porcelain")
+        if frozen and head == frozen and not dirty:
+            r.ok(f"{cid} remains frozen at {ref}")
+        else:
+            r.fail(f"{cid} is not frozen at {ref}: HEAD {str(head)[:12]}, ref {str(frozen)[:12]}"
+                   f"{', working tree dirty' if dirty else ''}")
+
+    for repo, wb in ctx["workbenches"].items():
+        path, cid = wb["path"], wb["cid"]
+        mcp = (load_json(Path(path) / ".mcp.json", {}) or {}).get("mcpServers", {})
+        related = [records[i] for i in records[cid].get("related", []) if records.get(i, {}).get("type") == "mcp-server"]
+        for name, spec in sorted(mcp.items()):
+            rc, out = mcp_get(name, path)
+            if "Connected" not in out:
+                r.fail(f"{repo}: adapter '{name}' is not usable ({out.strip().splitlines()[1:3]})")
+                continue
+            runs = None
+            command = shutil.which(spec.get("command", "")) or spec.get("command", "")
+            editable = receipts.get(Path(command).resolve(), set()) if command else set()
+            for rel in related:
+                co = checkouts.get(rel["source"]["repository"])
+                if co and any(e.is_relative_to(Path(co).resolve()) for e in editable):
+                    runs = rel["id"]
+            if runs:
+                r.ok(f"{repo}: adapter '{name}' connects and runs the {runs} checkout")
+            elif related:
+                r.warn(f"{repo}: adapter '{name}' connects, but not from a mapped checkout of "
+                       f"{', '.join(x['id'] for x in related)}")
+            else:
+                r.ok(f"{repo}: adapter '{name}' connects")
+
+        remotes = git(path, "remote")
+        if not remotes:
+            r.warn(f"{repo} has no remote: its commits exist only on this machine")
+        elif git(path, "rev-parse", "--abbrev-ref", "@{u}") and git(path, "rev-list", "--count", "@{u}..HEAD") not in ("0", None):
+            r.warn(f"{repo} has commits not pushed to its upstream")
+
+
+# --------------------------------------------------------------------- main
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        prog="bouch-doctor", description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--full", action="store_true",
+                    help="also read every declared entrypoint, run the registry's remote source "
+                         "verification, and probe fresh neutral and workbench sessions (uses API credit)")
+    ap.add_argument("--checkout", action="append", default=[], metavar="REPOSITORY=PATH",
+                    help=f"where a repository is checked out (repeatable; overrides {CONFIG})")
+    ap.add_argument("--config", type=Path, default=CONFIG, help="checkout map file")
+    args = ap.parse_args()
+
+    checkouts = dict((load_json(args.config, {}) or {}).get("checkouts", {}))
+    for item in args.checkout:
+        repo, _, path = item.partition("=")
+        checkouts[repo] = path
+    checkouts = {k: str(Path(v).expanduser()) for k, v in checkouts.items()}
+
+    r = Report()
+    ctx = {"registry": Registry(REGISTRY_URL), "checkouts": checkouts}
+    print(f"bouch-doctor{' --full' if args.full else ''}")
+    if not checkouts:
+        print(f"  (no checkout map at {args.config}; local project and adapter checks are limited)")
+
+    check_host(r, ctx)
+    ctx["records"], ctx["domains"] = load_records(r, ctx)
+    ctx["domain_plugin_names"] = {rec["source"]["repository"] for rec in ctx["records"].values()
+                                  if rec.get("type") == "agent-plugin"
+                                  and rec["source"]["repository"] != HOST_PLUGIN}
+    ctx["workbenches"] = {
+        rec["source"]["repository"]: {
+            "cid": cid, "path": checkouts[rec["source"]["repository"]],
+            "surface": workbench_surface(checkouts[rec["source"]["repository"]]),
+        }
+        for cid, rec in ctx["records"].items()
+        if rec.get("type") == "reference-workbench" and rec["source"]["repository"] in checkouts
+    }
+    check_shadows(r, ctx)
+    check_remote(r, ctx, args.full)
+    check_isolation(r, ctx, args.full)
+    check_adapters(r, ctx)
+
+    print(f"\n{'FAIL' if r.fails else 'OK'}: {r.fails} failed, {r.warns} warnings")
+    return 1 if r.fails else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

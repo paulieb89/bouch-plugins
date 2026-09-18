@@ -127,6 +127,18 @@ bouch-plugins/
             └── workflow-auditor/
 ```
 
+## Checking a Bouch host
+
+`doctor/bouch-doctor` is a read-only check that a Claude Code host matches the Bouch runtime architecture: bouch-agent-core and the Bouch Registry are user-wide, domain knowledge is reached through the Registry on demand, and workbench capabilities stay in their projects. It reads expectations from this marketplace, the live Registry and Claude Code itself. The only local input is a checkout map at `~/.config/bouch/doctor.json`.
+
+```
+doctor/bouch-doctor          # local state and live Registry, a few seconds
+doctor/bouch-doctor --full   # plus every declared entrypoint, remote source verification
+                             # and fresh neutral/workbench session probes (uses API credit)
+```
+
+See `doctor/bouch-doctor --help` for the checkout map format.
+
 ## Future plugins
 
 Planned additions (not yet built):
