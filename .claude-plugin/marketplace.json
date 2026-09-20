@@ -78,8 +78,8 @@
       "source": {
         "source": "github",
         "repo": "paulieb89/bouch-audio",
-        "ref": "v0.1.0-experimental",
-        "sha": "21bebe8e691a899c7a3f70485f646b429bec3082"
+        "ref": "v0.2.0",
+        "sha": "3d94024fad5d5f2a239864e42c3dc2727364d588"
       },
       "description": "Portable, evidence-tiered audio production knowledge: electronic production, mixing and mastering, and audio verification. DAW-independent. Canonical source: paulieb89/bouch-audio.",
       "author": {
