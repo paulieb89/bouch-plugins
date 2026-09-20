@@ -181,7 +181,12 @@ def workbench_surface(path):
     skills = {p.parent.name for p in path.glob(".claude/skills/*/SKILL.md")}
     commands = {p.stem for p in path.glob(".claude/commands/*.md")}
     servers = set((load_json(path / ".mcp.json", {}) or {}).get("mcpServers", {}))
-    return {"skills": skills, "commands": commands, "servers": servers}
+    # Domain plugins the project enables for itself. A project-scoped domain
+    # dependency is the architecture working, not a leak: its Skills arrive
+    # namespaced as "<plugin>:<skill>" and belong in the expected surface.
+    settings = load_json(path / ".claude" / "settings.json", {}) or {}
+    plugins = {k.split("@")[0] for k, v in (settings.get("enabledPlugins") or {}).items() if v}
+    return {"skills": skills, "commands": commands, "servers": servers, "plugins": plugins}
 
 
 def mcp_get(name, cwd):
@@ -538,8 +543,13 @@ def check_isolation(r, ctx, full):
         problems = []
         if neutral_init:
             extra = skills - host_skills
-            if extra != s["skills"]:
-                problems.append(f"Skills added {sorted(extra)}, workbench defines {sorted(s['skills'])}")
+            own = {k for k in extra if ":" not in k}
+            from_plugins = {k for k in extra if ":" in k}
+            undeclared = {k for k in from_plugins if k.split(":")[0] not in s["plugins"]}
+            if own != s["skills"]:
+                problems.append(f"Skills added {sorted(own)}, workbench defines {sorted(s['skills'])}")
+            if undeclared:
+                problems.append(f"Skills from plugins the project does not enable: {sorted(undeclared)}")
             extra_servers = set(servers) - {m["name"] for m in neutral_init.get("mcp_servers", [])}
             if extra_servers != s["servers"]:
                 problems.append(f"servers added {sorted(extra_servers)}, workbench defines {sorted(s['servers'])}")
@@ -549,7 +559,9 @@ def check_isolation(r, ctx, full):
         if problems:
             r.fail(f"{repo} session: {'; '.join(problems)}")
         else:
-            r.ok(f"{repo} session adds only its intended project capabilities")
+            deps = sorted(s["plugins"])
+            r.ok(f"{repo} session adds only its intended project capabilities"
+                 + (f", including project-scoped {', '.join(deps)}" if deps else ""))
         for name in s["servers"]:
             if servers.get(name) not in (None, "connected"):
                 r.info(f"{repo} session: '{name}' was '{servers[name]}' at session start "
