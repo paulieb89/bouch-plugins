@@ -84,10 +84,31 @@ These two are listed here for installation only. Their Skills and knowledge live
 | `bouch-agent-core` | [paulieb89/bouch-agent-core](https://github.com/paulieb89/bouch-agent-core) | Portable agent-development methodology: harness extension, environment recon, `/prime` authoring, evidence freeze |
 | `bouch-audio` | [paulieb89/bouch-audio](https://github.com/paulieb89/bouch-audio) | Portable audio production knowledge: electronic production, mixing and mastering, audio verification |
 
+**These two install at different scopes, and `bouch-doctor` enforces the
+difference.** `bouch-agent-core` is the host plugin and belongs user-wide.
+`bouch-audio` is domain knowledge, and domain knowledge is reached through
+the Registry on demand or enabled inside the project that needs it —
+installing it user-wide makes every unrelated session carry it, and the
+doctor reports it as a failure (`domain plugins installed user-wide`).
+
 ```
-/plugin install bouch-agent-core@bouch-plugins
-/plugin install bouch-audio@bouch-plugins
+# Host methodology — user-wide, once per machine
+claude plugin install bouch-agent-core@bouch-plugins --scope user
+
+# Domain knowledge — from inside the project that needs it
+cd <your project>
+claude plugin install bouch-audio@bouch-plugins --scope project
 ```
+
+The project-scoped install writes `enabledPlugins` into that project's
+`.claude/settings.json`, so the dependency is committed with the project
+rather than held in your user configuration. Note that `enabledPlugins` is
+a boolean map: it records *that* a project depends on a plugin, never which
+release it was qualified against. A project that needs that guarantee
+should declare the qualified version in its own contract and check it — see
+`audio-agent-workbench-v2` for a worked example.
+
+Verified against Claude Code 2.1.278.
 
 ## Directory structure
 
@@ -138,6 +159,83 @@ doctor/bouch-doctor --full   # plus every declared entrypoint, remote source ver
 ```
 
 See `doctor/bouch-doctor --help` for the checkout map format.
+
+## Release and propagation lifecycle
+
+How a local improvement becomes a release that existing consumers actually
+receive. This is a description of what Web v0.2.0 and Audio v0.2.0 did, not
+a proposal, and there is deliberately no automation: each stage is a
+decision, and the platform already provides the mechanics.
+
+The stages are distinct and it is worth not collapsing them — most of the
+ways this goes wrong are a stage being skipped rather than done badly.
+
+**1. Knowledge promotion — is this worth promoting at all?**
+Decided in `agent-enumeration-lab` with the `promote-finding` skill, and
+only for a finding already at VALIDATED. Its output is a proposal recorded
+under `findings/promotion-candidates/`; it stops there and changes no
+sibling repository. Promotion is not automatic, and a finding being
+interesting is not promotion.
+
+**2. Release qualification — does the package still earn its claims?**
+In the package's own repository. Run its `scripts/validate-package.sh` and
+its tests, and write what the release proves and does not prove into
+`evidence/qualification.md`. The bar is the package's, not the consumer's:
+bouch-audio v0.2.0 promoted one capability and left five demonstrated-but-
+unqualified tools behind precisely because they had no seeded-fault checks.
+Verify that previously qualified behaviour is unchanged rather than
+assuming it — v0.2.0 compared old and new reports field by field.
+
+**3. Publication — the release exists outside one machine.**
+Commit, annotated tag, `git push` including the tag. Nothing downstream can
+reference a release that is only local. Check what the remote actually has
+(`git ls-remote --tags`); the commit to pin is the **peeled** tag
+(`v0.2.0^{}`), not the tag object.
+
+**4. Registry update — discovery points at the new release.**
+Advance `source.ref` in the registry entry. The Registry is how an agent
+finds a capability it does not already know about, so a stale ref means
+fresh agents discover the old release. Convention: a record ref bump is a
+minor release of the registry itself (`v0.3.0` carried web-workbench
+v0.2.0; `v0.4.0` carried audio v0.2.0), published as a GitHub release so
+the deployed service always corresponds to a release rather than a bare
+`main`. Deployment happens in CI, not from a laptop. Verify live afterwards
+— read an entrypoint back and check the commit it reports.
+
+**5. Marketplace update — installation points at the new release.**
+Advance `ref` **and** `sha` in `.claude-plugin/marketplace.json` and push.
+This is the only place a plugin's version is pinned. Do not add a version
+to the marketplace entry when the plugin carries its own `plugin.json`;
+that version derives from the manifest.
+
+**6. Consumer dependency update — existing consumers actually move.**
+Nothing pushes. A consumer that is not updated keeps running the old
+release, and the two patterns differ in whether that is visible:
+
+| Pattern | Pin lives in | Update | Silent divergence? |
+|---|---|---|---|
+| Git submodule (web-workbench) | the consumer's own gitlink commit | check out the new tag, commit the submodule move | **No** — the pin is in the consumer's history |
+| Marketplace plugin (bouch-audio) | this marketplace's `marketplace.json` | `claude plugin marketplace update bouch-plugins`, then `claude plugin install <plugin>@bouch-plugins --scope project` | **Yes, unless the consumer guards it** — `enabledPlugins` is a boolean map and cannot pin a version |
+
+A plugin consumer that needs the guarantee must declare the qualified
+version in its own contract and check it. `audio-agent-workbench-v2` does
+this: CLAUDE.md states the qualified version, `tools/check-audio-dep.sh`
+compares it with what Claude Code reports installed and enabled, and
+`/prime` runs that on every session. Its policy on failure is the important
+half — an unresolved dependency must not silently fall back to a local
+copy, because that is how a superseded instrument keeps being used.
+
+**7. Fresh-consumer verification — a new agent really gets it.**
+The stage most easily skipped, because everything looks right on the
+machine that did the work. `doctor/bouch-doctor` checks the host
+architecture; `--full` additionally starts fresh headless sessions in a
+neutral directory and in each workbench and compares their capability
+surfaces, which is the only check here that observes what a new agent
+actually receives rather than what configuration claims. It uses API
+credit.
+
+Whatever the stage, prefer reading the running artifact over the
+documentation that describes it.
 
 ## Future plugins
 
