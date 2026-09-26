@@ -315,13 +315,24 @@ def check_host(r, ctx):
         r.ok(f"Registry configured and healthy: user-wide ({wiring}), {REGISTRY_URL}, "
              f"{reg.server_info.get('name')} {reg.server_info.get('version', '')}".rstrip())
 
-    # Generic routing contract in the user CLAUDE.md.
+    # Generic routing contract in the user CLAUDE.md. Optional once the
+    # Registry itself is healthy: a connected MCP server's own instructions
+    # load into every session automatically (session-start context, independent
+    # of CLAUDE.md), regardless of which wiring above supplied the connection
+    # — so a healthy Registry already gives an agent the same routing guidance
+    # this file would. `problems` is the registry check's own verdict, so this
+    # stays a hard failure when the Registry isn't configured or healthy,
+    # since then neither mechanism is present.
     claude_md = CLAUDE_DIR / "CLAUDE.md"
     text = claude_md.read_text() if claude_md.exists() else ""
     if ROUTING_MARKER in text.lower():
         r.ok("generic Registry routing contract present in ~/.claude/CLAUDE.md")
+    elif not problems:
+        r.warn("no ~/.claude/CLAUDE.md routing rule, but the Registry is healthy "
+               "and its own MCP instructions already supply the same routing guidance")
     else:
-        r.fail("~/.claude/CLAUDE.md has no Bouch Registry routing rule")
+        r.fail("~/.claude/CLAUDE.md has no Bouch Registry routing rule, and the "
+               "Registry itself is not healthy either")
 
 
 def load_records(r, ctx):
