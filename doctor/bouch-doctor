@@ -258,8 +258,23 @@ def check_host(r, ctx):
              f"enabled{', at the marketplace pin ' + pin[:12] if pin else ''}")
 
     # Registry: configured at user scope, connected, and actually the Registry.
+    #
+    # Two valid wirings, both user-wide in effect:
+    #   - Plugin-provided: bouch-agent-core's own .claude-plugin/plugin.json
+    #     declares the server. Claude Code then names it
+    #     "plugin:<HOST_PLUGIN>:<REGISTRY_SERVER>" (never the bare
+    #     REGISTRY_SERVER name), and its "scope" label describes how the
+    #     *plugin* was loaded (e.g. a real marketplace user-scope install),
+    #     not a standalone server scope — so user-wideness is derived from
+    #     the plugin's own install check above (`host`), not from text in
+    #     `claude mcp get`'s output.
+    #   - Standalone: someone ran `claude mcp add --scope user bouch-registry
+    #     <url>` by hand, kept for back-compat. Here Claude Code does use the
+    #     bare name and does print "User config" for user scope.
+    plugin_server_name = f"plugin:{HOST_PLUGIN}:{REGISTRY_SERVER}"
     with tempfile.TemporaryDirectory(prefix="bouch-doctor-") as neutral:
-        reg_out = mcp_get(REGISTRY_SERVER, neutral)[1]
+        bare_rc, bare_out = mcp_get(REGISTRY_SERVER, neutral)
+        plugin_rc, plugin_out = mcp_get(plugin_server_name, neutral)
     reg = ctx["registry"]
     try:
         reg.initialize()
@@ -267,19 +282,37 @@ def check_host(r, ctx):
         reg.server_info = None
         ctx["registry_error"] = str(e)
     problems = []
-    if "User config" not in reg_out:
-        problems.append("not configured at user scope")
-    if "Connected" not in reg_out:
-        problems.append("not connected")
-    if REGISTRY_URL not in reg_out:
-        problems.append(f"URL is not {REGISTRY_URL}")
+    if plugin_rc == 0:
+        # Plugin-provided. Claude Code found a server by this name, so it's
+        # declared; user-wideness is the plugin's own install scope, already
+        # established above, not text in `claude mcp get`'s "Scope" line
+        # (which describes how the *plugin* loaded, e.g. "Dynamic config
+        # (from command line)" under --plugin-dir, not a server scope).
+        reg_out, wiring = plugin_out, f"plugin-provided by {HOST_PLUGIN}"
+        if not host:
+            problems.append(f"provided by {HOST_PLUGIN}, which is not installed at user scope")
+    elif bare_rc == 0:
+        # Standalone, manually configured: back-compat with `claude mcp add
+        # --scope user bouch-registry <url>`. Here Claude Code does use the
+        # bare name and does print "User config" for user scope.
+        reg_out, wiring = bare_out, "standalone (claude mcp add)"
+        if "User config" not in reg_out:
+            problems.append("not configured at user scope")
+    else:
+        reg_out, wiring = "", None
+        problems.append(f"not configured (as either {REGISTRY_SERVER!r} or {plugin_server_name!r})")
+    if reg_out:
+        if "Connected" not in reg_out:
+            problems.append("not connected")
+        if REGISTRY_URL not in reg_out:
+            problems.append(f"URL is not {REGISTRY_URL}")
     if not reg.server_info or reg.server_info.get("name") != REGISTRY_SERVER:
         problems.append(f"endpoint did not identify as {REGISTRY_SERVER} "
                         f"({ctx.get('registry_error', reg.server_info)})")
     if problems:
         r.fail(f"Registry: {'; '.join(problems)}")
     else:
-        r.ok(f"Registry configured and healthy: user scope, {REGISTRY_URL}, "
+        r.ok(f"Registry configured and healthy: user-wide ({wiring}), {REGISTRY_URL}, "
              f"{reg.server_info.get('name')} {reg.server_info.get('version', '')}".rstrip())
 
     # Generic routing contract in the user CLAUDE.md.
