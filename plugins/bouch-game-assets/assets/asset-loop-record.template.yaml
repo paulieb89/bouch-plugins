@@ -1,0 +1,28 @@
+loop_id: asset/c001
+asset: asset_name
+candidate_location: /absolute/path/to/candidate
+status: provisional # accepted | provisional | rejected | blocked
+
+brief:
+  visual_intent: ""
+  structural_contract: []
+  runtime_contract: []
+  exclusions: []
+  required_judgement_owner: human
+
+iterations:
+  - id: c001
+    hypothesis: ""
+    actions: []
+    evidence:
+      - layer: source # source | import | automated_runtime | real_interaction | perceptual
+        kind: inspection
+        path: ""
+        command: ""
+        observation: ""
+    outcome: provisional
+    reason: ""
+    judgement_owner: unreviewed # human | agent | unreviewed
+    next_loop: ""
+
+lessons: []

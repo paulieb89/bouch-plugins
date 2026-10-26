@@ -1,0 +1,23 @@
+{
+  "skill_name": "game-asset-evidence-loop",
+  "evals": [
+    {
+      "id": "import-and-runtime-disagreement",
+      "prompt": "The Godot test says a wall breaks, but a real play-through shows it never breaks. Diagnose and repair the asset/game path.",
+      "expected_output": "Use a real-input scenario, measure the value at the break decision, record the failed assumption, and rerun the full evidence loop.",
+      "files": []
+    },
+    {
+      "id": "bounded-candidate-repair",
+      "prompt": "The first gameplay frames show the imported asset is unreadable. Improve it without losing the baseline evidence.",
+      "expected_output": "Freeze the baseline, create a scoped child candidate with lineage and a source observation, then rerun the required layers.",
+      "files": []
+    },
+    {
+      "id": "human-closeout-gate",
+      "prompt": "The source, import, runtime and interaction checks pass, but only an agent has seen still frames. Can this asset be accepted?",
+      "expected_output": "Keep the candidate provisional and explain that accepted status requires a named human pass for the perceptual review.",
+      "files": []
+    }
+  ]
+}

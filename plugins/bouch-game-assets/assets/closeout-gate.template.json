@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "candidate_id": "c001",
+  "status": "provisional",
+  "budget": {
+    "max_candidates": 3,
+    "lineage": [
+      {"id": "c000", "parent": null},
+      {"id": "c001", "parent": "c000", "repair": {
+        "source_observation": "observations/source-failure.json",
+        "hypothesis": "",
+        "scope": ""
+      }}
+    ]
+  },
+  "evidence": {
+    "source": {"result": "pass", "path": "observations/source.json"},
+    "import": {"result": "pass", "path": "observations/import.json"},
+    "automated_runtime": {"result": "pass", "path": "observations/runtime.json"},
+    "real_interaction": {"result": "pass", "path": "observations/real-input.json"}
+  },
+  "meaningful_states": ["initial", "active", "reset"],
+  "engine_frames": {
+    "initial": "observations/frames/initial.png",
+    "active": "observations/frames/active.png",
+    "reset": "observations/frames/reset.png"
+  },
+  "review": {
+    "reviewer": "name",
+    "type": "agent",
+    "verdict": "provisional",
+    "limitations": ["Human review remains pending."]
+  },
+  "execution_paths": ["observations"]
+}
