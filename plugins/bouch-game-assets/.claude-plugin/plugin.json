@@ -1,6 +1,6 @@
 {
   "name": "bouch-game-assets",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Evidence-led game and 3D asset production: structural inspection, engine import, deterministic runtime checks, real interaction, integrity, bounded candidate lineage, and human visual review. Engine-agnostic; projects own their adapters and runtime harnesses.",
   "author": {
     "name": "Paul Boucherat"
