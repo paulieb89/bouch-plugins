@@ -91,10 +91,7 @@
     },
     {
       "name": "bouch-game-assets",
-      "source": {
-        "source": "local",
-        "path": "./plugins/bouch-game-assets"
-      },
+      "source": "./plugins/bouch-game-assets",
       "description": "Evidence-led game and 3D asset production: source, import, runtime, real interaction, integrity, bounded candidate lineage, and human visual review. Engine-agnostic; projects own their adapters.",
       "version": "0.1.1",
       "author": {
