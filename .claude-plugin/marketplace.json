@@ -102,6 +102,13 @@
       "category": "development",
       "tags": ["game-assets", "3d", "blender", "godot", "verification", "evidence"],
       "keywords": ["game-assets", "3d-assets", "asset-verification", "candidate-lineage"]
+    },
+    {
+      "name": "bouch-character-performance",
+      "source": "./plugins/bouch-character-performance",
+      "description": "Reusable character design, voice, performance and review guidance.",
+      "version": "0.1.0",
+      "category": "skills"
     }
   ]
 }

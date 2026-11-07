@@ -1,0 +1,16 @@
+{
+  "name": "bouch-character-performance",
+  "version": "0.1.0",
+  "description": "Reusable character design, voice, performance and review guidance.",
+  "author": {
+    "name": "Paul Boucherat"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "BOUCH Character Performance",
+    "shortDescription": "Develop and perform reusable characters",
+    "longDescription": "Develop, voice, animate and review characters across visual or audio projects.",
+    "developerName": "BOUCH",
+    "category": "Productivity"
+  }
+}
