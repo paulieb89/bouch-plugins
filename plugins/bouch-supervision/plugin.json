@@ -1,0 +1,16 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "bouch-supervision",
+  "version": "0.1.1",
+  "description": "BOUCH development supervision, project recovery and continuity.",
+  "author": {
+    "name": "Paul Boucherat"
+  },
+  "keywords": [
+    "supervision",
+    "continuity",
+    "handoff",
+    "coding-agents",
+    "evidence"
+  ]
+}

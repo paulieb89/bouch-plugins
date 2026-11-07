@@ -102,6 +102,20 @@
       "category": "development",
       "tags": ["game-assets", "3d", "blender", "godot", "verification", "evidence"],
       "keywords": ["game-assets", "3d-assets", "asset-verification", "candidate-lineage"]
+    },
+    {
+      "name": "bouch-supervision",
+      "source": "./plugins/bouch-supervision",
+      "description": "BOUCH development supervision, project recovery and continuity.",
+      "version": "0.1.1",
+      "category": "development"
+    },
+    {
+      "name": "bouch-engineering",
+      "source": "./plugins/bouch-engineering",
+      "description": "Specialist engineering evidence assessment for native coding agents.",
+      "version": "0.1.0",
+      "category": "development"
     }
   ]
 }
