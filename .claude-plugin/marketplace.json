@@ -109,6 +109,20 @@
       "description": "Reusable character design, voice, performance and review guidance.",
       "version": "0.1.0",
       "category": "skills"
+    },
+    {
+      "name": "bouch-supervision",
+      "source": "./plugins/bouch-supervision",
+      "description": "BOUCH development supervision, project recovery and continuity.",
+      "version": "0.1.1",
+      "category": "development"
+    },
+    {
+      "name": "bouch-engineering",
+      "source": "./plugins/bouch-engineering",
+      "description": "Specialist engineering evidence assessment for native coding agents.",
+      "version": "0.1.0",
+      "category": "development"
     }
   ]
 }

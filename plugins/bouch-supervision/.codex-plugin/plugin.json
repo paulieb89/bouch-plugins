@@ -1,0 +1,16 @@
+{
+  "name": "bouch-supervision",
+  "version": "0.1.1",
+  "description": "BOUCH development supervision, project recovery and continuity.",
+  "author": {
+    "name": "Paul Boucherat"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "BOUCH Supervision",
+    "shortDescription": "Supervise BOUCH development across sessions",
+    "longDescription": "Recover project context, work directly or delegate selectively, inspect evidence, and preserve continuity.",
+    "developerName": "BOUCH",
+    "category": "Productivity"
+  }
+}
