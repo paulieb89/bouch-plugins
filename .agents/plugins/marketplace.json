@@ -1,7 +1,7 @@
 {
-  "name": "bouch-local",
+  "name": "bouch-plugins",
   "interface": {
-    "displayName": "BOUCH Local"
+    "displayName": "BOUCH Plugins"
   },
   "plugins": [
     {
