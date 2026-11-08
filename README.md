@@ -220,7 +220,8 @@ Reflects this checkout. There are seven local plugin roots under `plugins/`; `bo
 ```
 bouch-plugins/
 ├── README.md
-├── DEVELOPMENT.md                    ← maintainer notes
+├── AGENTS.md                         ← short agent guidance
+├── DEVELOPMENT.md                    ← maintainer workflow
 ├── .agents/plugins/marketplace.json  ← OpenAI/Codex catalogue (9 entries)
 ├── .claude-plugin/marketplace.json   ← Claude catalogue (9 entries)
 ├── doctor/bouch-doctor               ← optional host-architecture check
@@ -298,90 +299,13 @@ doctor/bouch-doctor --full   # plus every declared entrypoint, remote source ver
 
 See `doctor/bouch-doctor --help` for the checkout map format.
 
-## Release and propagation lifecycle
+## Releasing and updating plugins
 
-This applies to capabilities distributed through the Registry and external sources (Core, `bouch-audio`, web-workbench). The locally sourced plugins in this repository are versioned with this repository's marketplace; the Registry stage does not apply to them unless they are also distributed through a Registry record, and no such record is asserted here.
+Local plugins are versioned and released with this repository. External plugins (`bouch-agent-core`, `bouch-audio`) are released in their own repositories first; this repository then re-pins them in **both** catalogues: tag plus peeled commit in the Claude entry, commit only in the OpenAI entry. Neither catalogue is the sole pin. If a Core or Audio release is also distributed through a Bouch Registry record, that record is updated and verified separately in the Registry's repository; the marketplace does not do that for you.
 
-How a local improvement became a release that existing consumers actually
-received. This is an **example** drawn from the earlier Web v0.2.0 and Audio
-v0.2.0 releases. It is not a compulsory process for plugin changes: the
-steps below, including `agent-enumeration-lab` and the promotion stage, are
-what those releases did and not requirements for changing a plugin in this
-repository. There is deliberately no automation: each stage is a decision,
-and the platform already provides the mechanics.
+Nothing pushes updates to consumers. Refreshing a marketplace re-reads the catalogue and may also refresh configured plugin files; verify the installed version and activation separately. A project's `enabledPlugins` cannot pin a version. A consumer that needs a qualified version should declare and check it itself (`audio-agent-workbench-v2` does this with a check script run from `/prime`) and should not silently fall back to a local copy if the dependency fails to resolve. `doctor/bouch-doctor --full` is an optional check that observes what fresh sessions actually receive, for hosts using the Core/Registry model; isolated install tests are another way.
 
-Where a release does go through these stages, they are distinct and worth not
-collapsing — most of the ways this goes wrong are a stage being skipped
-rather than done badly.
-
-**1. Knowledge promotion — is this worth promoting at all?**
-Decided in `agent-enumeration-lab` with the `promote-finding` skill, and
-only for a finding already at VALIDATED. Its output is a proposal recorded
-under `findings/promotion-candidates/`; it stops there and changes no
-sibling repository. Promotion is not automatic, and a finding being
-interesting is not promotion.
-
-**2. Release qualification — does the package still earn its claims?**
-In the package's own repository. Run its `scripts/validate-package.sh` and
-its tests, and write what the release proves and does not prove into
-`evidence/qualification.md`. The bar is the package's, not the consumer's:
-bouch-audio v0.2.0 promoted one capability and left five demonstrated-but-
-unqualified tools behind precisely because they had no seeded-fault checks.
-Verify that previously qualified behaviour is unchanged rather than
-assuming it — v0.2.0 compared old and new reports field by field.
-
-**3. Publication — the release exists outside one machine.**
-Commit, annotated tag, `git push` including the tag. Nothing downstream can
-reference a release that is only local. Check what the remote actually has
-(`git ls-remote --tags`); the commit to pin is the **peeled** tag
-(`v0.2.0^{}`), not the tag object.
-
-**4. Registry update (only for capabilities distributed through Registry records) — discovery points at the new release.**
-Advance `source.ref` in the registry entry. The Registry is how an agent
-finds a capability it does not already know about, so a stale ref means
-fresh agents discover the old release. Convention: a record ref bump is a
-minor release of the registry itself (`v0.3.0` carried web-workbench
-v0.2.0; `v0.4.0` carried audio v0.2.0), published as a GitHub release so
-the deployed service always corresponds to a release rather than a bare
-`main`. Deployment happens in CI, not from a laptop. Verify live afterwards
-— read an entrypoint back and check the commit it reports.
-
-**5. Marketplace update — installation points at the new release.**
-For externally sourced entries, advance `ref` **and** `sha` in
-`.claude-plugin/marketplace.json` and push. This is the only place such a
-plugin's version is pinned. Do not add a version to the marketplace entry
-when the plugin carries its own `plugin.json`; that version derives from the
-manifest. (Locally sourced entries in this repository do carry a `version`
-in the Claude manifest; keep it in sync with the plugin's own manifest.)
-
-**6. Consumer dependency update — existing consumers actually move.**
-Nothing pushes. A consumer that is not updated keeps running the old
-release, and the two patterns differ in whether that is visible:
-
-| Pattern | Pin lives in | Update | Silent divergence? |
-|---|---|---|---|
-| Git submodule (web-workbench) | the consumer's own gitlink commit | check out the new tag, commit the submodule move | **No** — the pin is in the consumer's history |
-| Marketplace plugin (bouch-audio) | this marketplace's `marketplace.json` | `claude plugin marketplace update bouch-plugins`, then `claude plugin install <plugin>@bouch-plugins --scope project` | **Yes, unless the consumer guards it** — `enabledPlugins` is a boolean map and cannot pin a version |
-
-A plugin consumer that needs the guarantee must declare the qualified
-version in its own contract and check it. `audio-agent-workbench-v2` does
-this: CLAUDE.md states the qualified version, `tools/check-audio-dep.sh`
-compares it with what Claude Code reports installed and enabled, and
-`/prime` runs that on every session. Its policy on failure is the important
-half — an unresolved dependency must not silently fall back to a local
-copy, because that is how a superseded instrument keeps being used.
-
-**7. Fresh-consumer verification — a new agent really gets it.**
-The stage most easily skipped, because everything looks right on the
-machine that did the work. Where the Core/Registry architecture is in use,
-`doctor/bouch-doctor` checks the host architecture; `--full` additionally
-starts fresh headless sessions in a neutral directory and in each workbench
-and compares their capability surfaces, which is the only check here that
-observes what a new agent actually receives rather than what configuration
-claims. It uses API credit.
-
-Whatever the stage, prefer reading the running artifact over the
-documentation that describes it.
+The maintainer workflow (manifest rules, catalogue updates, validation, isolated testing, remote verification) is in [DEVELOPMENT.md](DEVELOPMENT.md). Prefer reading the running artifact, such as the remote tag or the live service, over the documentation that describes it.
 
 ## Future plugins
 
