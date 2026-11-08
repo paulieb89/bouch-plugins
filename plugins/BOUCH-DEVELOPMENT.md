@@ -6,13 +6,13 @@ Both packages have a portable root `plugin.json` and a thin Claude manifest unde
 
 ## Install and validate
 
-For Codex, add this repository as a marketplace if necessary with `codex plugin marketplace add paulieb89/bouch-plugins --ref test/bouch-marketplace-reconcile`, then install `bouch-supervision@bouch-plugins` or `bouch-engineering@bouch-plugins` with `codex plugin add`. Use the intended published ref for the version you want. An existing `bouch-plugins` source may already be configured; inspect it before adding or switching sources. Both catalogues in this repository are named `bouch-plugins`, but existing installations can still use the distinct `bouch-local` identity from earlier testing; they retain it until explicitly migrated. Restart or start a fresh session to pick up installed skills. For Claude Code, register this repository as a marketplace and install `bouch-engineering@bouch-plugins`, or test directly with `claude --plugin-dir <repository>/plugins/bouch-engineering`. `claude plugin validate <plugin-directory>` validates each Claude manifest and skill; validate the repository root separately for the Claude marketplace.
+For Codex, add this repository as a marketplace if necessary with `codex plugin marketplace add paulieb89/bouch-plugins` (add `--ref <branch-or-tag>` to test an unmerged branch or a specific release), then install `bouch-supervision@bouch-plugins` or `bouch-engineering@bouch-plugins` with `codex plugin add`. Use the intended published ref for the version you want. An existing `bouch-plugins` source may already be configured; inspect it before adding or switching sources. Both catalogues in this repository are named `bouch-plugins`, but existing installations can still use the distinct `bouch-local` identity from earlier testing; they retain it until explicitly migrated. Restart or start a fresh session to pick up installed skills. For Claude Code, register this repository as a marketplace and install `bouch-engineering@bouch-plugins`, or test directly with `claude --plugin-dir <repository>/plugins/bouch-engineering`. `claude plugin validate <plugin-directory>` validates each Claude manifest and skill; validate the repository root separately for the Claude marketplace.
 
 ChatGPT Work workspace import is a separate distribution step: its GitHub import must be given a repository/ref containing the committed marketplace and plugin files, with access to that repository. A successful local Codex install does not establish workspace import, GitHub sync or skill activation. See [workspace import documentation](https://learn.chatgpt.com/docs/enterprise/plugin-management) and [portable plugin packaging](https://developers.openai.com/plugins/build/plugins). No publishing or workspace import is implied by these instructions.
 
 ## Existing capability audit
 
-The audited `bouch-agent-core` checkout included work newer than the catalogue's published `v0.2.4` pin. It remains independently usable and is not modified or copied here:
+The audit was made against a `bouch-agent-core` checkout newer than the earlier `v0.2.4` pin; the catalogue now pins the published `v0.2.5` (commit `af8a8008432d02c453460a23b565192fd53c4319`). Core remains independently usable and is not modified or copied here:
 
 | Core skill | Assessment |
 | --- | --- |
@@ -21,7 +21,7 @@ The audited `bouch-agent-core` checkout included work newer than the catalogue's
 | `environment-recon` | Useful when a capability surface has genuinely drifted; native discovery and a bounded check suffice for ordinary work. |
 | `harness-extension` | Specialized when a real capability gap needs an extension; keep optional in Core. |
 | `prime-authoring` | Useful when authoring an established project-specific prime; not needed for ordinary recovery. |
-| `bouch-project-routing` | Historical assessment, made against the earlier Core: BOUCH orientation with stronger Core/registry framing; do not impose it on these plugins. A revised Core now exists locally but is unpublished, so this assessment has not been re-made against it. Revisit separately if its own users need current architectural language. |
+| `bouch-project-routing` | Historical assessment, made against the earlier Core: BOUCH orientation with stronger Core/registry framing; do not impose it on these plugins. Core `v0.2.5` is now published and pinned by the catalogue, but this assessment has not been re-made against it. Revisit separately if its own users need current architectural language. |
 
 The previous supervision skill's Runner and Notion directions are superseded by the current architecture. Generic implementation, review, testing and agent dispatch skills were not recreated. The evidence-assessment skill is a first experiment, not a claim that its additional value over both native agents has been proven; evaluate it against real cases before expanding the package.
 

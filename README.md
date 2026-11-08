@@ -11,7 +11,7 @@ A plugin marketplace for BOUCH development plugins, game and character plugins, 
 
 ## Current state of this checkout
 
-This README describes the reconciled checkout on the GitHub test branch `test/bouch-marketplace-reconcile`. It does not assume that `main` has published this arrangement; `main` may still carry an older catalogue. Install from the test branch (below) to get what this README describes, and inspect any existing `bouch-plugins` source on your machine before adding or switching one.
+This README describes the reconciled marketplace as intended for `main`. The Claude catalogue pins `bouch-agent-core` (Core) at `v0.2.5` (commit `af8a8008432d02c453460a23b565192fd53c4319`) and `bouch-audio` at `v0.2.0`. Inspect any existing `bouch-plugins` source on your machine before adding or switching one; an older source may still carry an earlier catalogue.
 
 Two catalogues live in this repository. They share a name but list different sets of plugins:
 
@@ -26,10 +26,10 @@ Mentions of services below describe what a plugin is configured to use. They do 
 
 ## Quick install
 
-Claude Code, from the test branch (the `#<ref>` form selects a branch; the equivalent `claude plugin marketplace add` CLI command succeeded in an isolated Claude configuration; the slash command itself was not the thing tested):
+Claude Code:
 
 ```
-/plugin marketplace add paulieb89/bouch-plugins#test/bouch-marketplace-reconcile
+/plugin marketplace add paulieb89/bouch-plugins
 /plugin install foundations@bouch-plugins
 /reload-plugins
 ```
@@ -37,11 +37,11 @@ Claude Code, from the test branch (the `#<ref>` form selects a branch; the equiv
 Codex CLI:
 
 ```
-codex plugin marketplace add paulieb89/bouch-plugins --ref test/bouch-marketplace-reconcile
+codex plugin marketplace add paulieb89/bouch-plugins
 codex plugin add foundations@bouch-plugins
 ```
 
-Once a release is published to `main`, the ref can be dropped. Until then, adding `paulieb89/bouch-plugins` without a ref follows the repository's default branch, which may not match this README. See [plugins/BOUCH-DEVELOPMENT.md](plugins/BOUCH-DEVELOPMENT.md) for what has and has not been verified for Codex installs.
+Adding without a ref follows the repository's default branch. To test an unmerged branch instead, append `#<branch>` (Claude Code) or `--ref <branch>` (Codex). See [plugins/BOUCH-DEVELOPMENT.md](plugins/BOUCH-DEVELOPMENT.md) for what has and has not been verified for Codex installs.
 
 Skills are namespaced, e.g. `/foundations:property-report`, `/foundations:humaniser`. Run `/plugin` to see installed plugins and `/help` to see skills.
 
@@ -69,7 +69,7 @@ Versions are as in the Claude manifest. `bouch-agent-core` and `bouch-audio` are
 | `legal-os` | 1.0.0 | OpenAI + Claude | UK legal research |
 | `property` | 1.0.0 | OpenAI + Claude | UK property investment |
 | `foundations` | 1.0.0 | OpenAI + Claude | Ten-skill sampler |
-| `bouch-agent-core` | pin `v0.2.4` | Claude only, external | Agent methodology (Core) |
+| `bouch-agent-core` | pin `v0.2.5` | Claude only, external | Agent methodology (Core) |
 | `bouch-audio` | pin `v0.2.0` | Claude only, external | Audio production knowledge |
 
 ### bouch-supervision and bouch-engineering (BOUCH development plugins)

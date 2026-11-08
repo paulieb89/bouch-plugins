@@ -62,8 +62,8 @@
       "source": {
         "source": "github",
         "repo": "paulieb89/bouch-agent-core",
-        "ref": "v0.2.4",
-        "sha": "e65f68222f01d956b0b8dd88c8de80b315e30a25"
+        "ref": "v0.2.5",
+        "sha": "af8a8008432d02c453460a23b565192fd53c4319"
       },
       "description": "Portable cross-domain agent-development methodology: harness-extension discipline, environment recon, /prime authoring contract, and evidence-freeze practice. Canonical source: paulieb89/bouch-agent-core.",
       "author": {
