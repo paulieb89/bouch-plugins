@@ -11,14 +11,14 @@ A plugin marketplace for BOUCH development plugins, game and character plugins, 
 
 ## Current state of this checkout
 
-This README describes the reconciled marketplace as intended for `main`. The Claude catalogue pins `bouch-agent-core` (Core) at `v0.2.5` (commit `af8a8008432d02c453460a23b565192fd53c4319`) and `bouch-audio` at `v0.2.0`. Inspect any existing `bouch-plugins` source on your machine before adding or switching one; an older source may still carry an earlier catalogue.
+This README describes the reconciled marketplace as intended for `main`. Both catalogues pin `bouch-agent-core` (Core) and `bouch-audio` to commits: the Claude entries pin release tags `v0.2.5` and `v0.2.0` plus their commit hashes, while the OpenAI entries pin the matching commit hashes only (Core `af8a8008432d02c453460a23b565192fd53c4319`, Audio `3d94024fad5d5f2a239864e42c3dc2727364d588`). Inspect any existing `bouch-plugins` source on your machine before adding or switching one; an older source may still carry an earlier catalogue.
 
-Two catalogues live in this repository. They share a name but list different sets of plugins:
+Two catalogues live in this repository. They share a name and list the same nine plugins:
 
 | Catalogue | File | Entries |
 |-----------|------|---------|
-| OpenAI / Codex | `.agents/plugins/marketplace.json` | Seven local entries: `bouch-supervision`, `bouch-engineering`, `bouch-character-performance`, `foundations`, `property`, `legal-os`, `bouch-game-assets` |
-| Claude Code | `.claude-plugin/marketplace.json` | The same seven local plugins, plus two externally sourced entries, `bouch-agent-core` (Core) and `bouch-audio`, pinned to tags and commits in their own repositories (nine in total) |
+| OpenAI / Codex | `.agents/plugins/marketplace.json` | Nine entries: seven local (`bouch-supervision`, `bouch-engineering`, `bouch-character-performance`, `foundations`, `property`, `legal-os`, `bouch-game-assets`), plus two externally sourced Git root entries, `bouch-agent-core` (Core) and `bouch-audio`, pinned by commit |
+| Claude Code | `.claude-plugin/marketplace.json` | The same seven local plugins, plus the same two externally sourced entries, `bouch-agent-core` (Core) and `bouch-audio`, pinned by release tag plus commit hash in their own repositories (nine in total) |
 
 Mentions of services below describe what a plugin is configured to use. They do not establish that any service is currently up or reachable.
 
@@ -58,7 +58,7 @@ This marketplace (`bouch-plugins`) provides BOUCH development, game and characte
 
 ## What's in the marketplace
 
-Versions are as in the Claude manifest. `bouch-agent-core` and `bouch-audio` are pinned by tag/commit rather than versioned in this repository.
+Versions are as in the Claude manifest. `bouch-agent-core` and `bouch-audio` are pinned externally rather than versioned in this repository: the Claude entries by release tag and commit, the OpenAI entries by commit only.
 
 | Plugin | Version | Catalogue | Area |
 |--------|---------|-----------|------|
@@ -69,8 +69,8 @@ Versions are as in the Claude manifest. `bouch-agent-core` and `bouch-audio` are
 | `legal-os` | 1.0.0 | OpenAI + Claude | UK legal research |
 | `property` | 1.0.0 | OpenAI + Claude | UK property investment |
 | `foundations` | 1.0.0 | OpenAI + Claude | Ten-skill sampler |
-| `bouch-agent-core` | pin `v0.2.5` | Claude only, external | Agent methodology (Core) |
-| `bouch-audio` | pin `v0.2.0` | Claude only, external | Audio production knowledge |
+| `bouch-agent-core` | pin `v0.2.5` | OpenAI + Claude, external | Agent methodology (Core) |
+| `bouch-audio` | pin `v0.2.0` | OpenAI + Claude, external | Audio production knowledge |
 
 ### bouch-supervision and bouch-engineering (BOUCH development plugins)
 
@@ -172,9 +172,9 @@ The skills use the open [Agent Skills specification](https://agentskills.io/spec
 
 ---
 
-### bouch-agent-core and bouch-audio (external sources, Claude catalogue only)
+### bouch-agent-core and bouch-audio (external sources, both catalogues)
 
-These two appear only in the Claude catalogue, are optional, and are listed here for installation only. Neither is required by the development plugins above. Their Skills and knowledge live in their own repositories, and each marketplace entry pins a qualified release tag and commit there.
+These two appear in both catalogues as external Git sources, are optional, and are listed here for installation only. Neither is required by the development plugins above. Their Skills and knowledge live in their own repositories, and each marketplace entry pins a commit there (the Claude entries also pin the release tag; the OpenAI entries pin the matching commit hash only).
 
 | Plugin | Canonical source | What it is |
 |--------|------------------|------------|
@@ -209,6 +209,8 @@ release it was qualified against. A project that needs that guarantee
 should declare the qualified version in its own contract and check it — see
 `audio-agent-workbench-v2` for a worked example.
 
+**Codex.** The Codex catalogue lists both as external Git root sources pinned by commit. In a fresh isolated Codex environment, the nine-entry local marketplace was discovered and both external plugins installed successfully, as versions 0.2.5 (Core) and 0.2.0 (Audio). In a separate isolated skill probe, the Codex session explicitly read one Core skill (`handoff-authoring`) and one Audio skill (`audio-verification`); this does not show that every Core or Audio skill was exercised. That probe had no Registry tool, so it says nothing about Registry access from Codex. A user's own environment may have a separately configured Registry; that is local state outside this repository. Whether and how to wire the Registry for Codex is a later decision, and the catalogue entries add no MCP configuration.
+
 Verified against Claude Code 2.1.278.
 
 ## Directory structure
@@ -219,7 +221,7 @@ Reflects this checkout. There are seven local plugin roots under `plugins/`; `bo
 bouch-plugins/
 ├── README.md
 ├── DEVELOPMENT.md                    ← maintainer notes
-├── .agents/plugins/marketplace.json  ← OpenAI/Codex catalogue (7 entries)
+├── .agents/plugins/marketplace.json  ← OpenAI/Codex catalogue (9 entries)
 ├── .claude-plugin/marketplace.json   ← Claude catalogue (9 entries)
 ├── doctor/bouch-doctor               ← optional host-architecture check
 ├── guide/                            ← BOUCH Skills Guide (md + pdf, own LICENSE.txt)

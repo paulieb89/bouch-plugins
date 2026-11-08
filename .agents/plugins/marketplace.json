@@ -87,6 +87,32 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Developer tools"
+    },
+    {
+      "name": "bouch-agent-core",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/paulieb89/bouch-agent-core.git",
+        "sha": "af8a8008432d02c453460a23b565192fd53c4319"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer tools"
+    },
+    {
+      "name": "bouch-audio",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/paulieb89/bouch-audio.git",
+        "sha": "3d94024fad5d5f2a239864e42c3dc2727364d588"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer tools"
     }
   ]
 }
