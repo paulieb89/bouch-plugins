@@ -1,23 +1,49 @@
-# BOUCH Plugins — Claude Code Plugin Marketplace
+# BOUCH Plugins — Plugin Marketplace
 
-UK-specific Claude Code plugins for property investors, solicitors, small business owners, and project managers. Real SKILL.md format, MCP-backed where relevant, cross-checked against Anthropic's official agent skill standard.
+A plugin marketplace for BOUCH development plugins, game and character plugins, and UK-specific domain plugins (property, legal, small business, project management). Real SKILL.md format, MCP-backed where relevant, cross-checked against Anthropic's official agent skill standard.
 
-**Marketplace name:** `bouch-plugins`
+**Marketplace name:** `bouch-plugins` (both the Claude and the OpenAI catalogue use this name)
 **Home:** https://github.com/paulieb89/bouch-plugins
 
 > 📘 **Free guide included.** The ~35-page [BOUCH Skills Guide](guide/) walks through writing your first skill, wiring MCP, and shipping a plugin. Markdown + PDF, CC BY-NC 4.0. Free to share and adapt with attribution.
 
 ---
 
+## Current state of this checkout
+
+This README describes the reconciled checkout on the GitHub test branch `test/bouch-marketplace-reconcile`. It does not assume that `main` has published this arrangement; `main` may still carry an older catalogue. Install from the test branch (below) to get what this README describes, and inspect any existing `bouch-plugins` source on your machine before adding or switching one.
+
+Two catalogues live in this repository. They share a name but list different sets of plugins:
+
+| Catalogue | File | Entries |
+|-----------|------|---------|
+| OpenAI / Codex | `.agents/plugins/marketplace.json` | Seven local entries: `bouch-supervision`, `bouch-engineering`, `bouch-character-performance`, `foundations`, `property`, `legal-os`, `bouch-game-assets` |
+| Claude Code | `.claude-plugin/marketplace.json` | The same seven local plugins, plus two externally sourced entries, `bouch-agent-core` (Core) and `bouch-audio`, pinned to tags and commits in their own repositories (nine in total) |
+
+Mentions of services below describe what a plugin is configured to use. They do not establish that any service is currently up or reachable.
+
+---
+
 ## Quick install
 
+Claude Code, from the test branch (the `#<ref>` form selects a branch; the equivalent `claude plugin marketplace add` CLI command succeeded in an isolated Claude configuration; the slash command itself was not the thing tested):
+
 ```
-/plugin marketplace add paulieb89/bouch-plugins
+/plugin marketplace add paulieb89/bouch-plugins#test/bouch-marketplace-reconcile
 /plugin install foundations@bouch-plugins
 /reload-plugins
 ```
 
-Skills are namespaced as `/foundations:property-report`, `/foundations:humaniser`, etc. Run `/plugin` to see installed plugins and `/help` to see skills.
+Codex CLI:
+
+```
+codex plugin marketplace add paulieb89/bouch-plugins --ref test/bouch-marketplace-reconcile
+codex plugin add foundations@bouch-plugins
+```
+
+Once a release is published to `main`, the ref can be dropped. Until then, adding `paulieb89/bouch-plugins` without a ref follows the repository's default branch, which may not match this README. See [plugins/BOUCH-DEVELOPMENT.md](plugins/BOUCH-DEVELOPMENT.md) for what has and has not been verified for Codex installs.
+
+Skills are namespaced, e.g. `/foundations:property-report`, `/foundations:humaniser`. Run `/plugin` to see installed plugins and `/help` to see skills.
 
 ## Companion plugin
 
@@ -28,13 +54,72 @@ For plugin authoring workflows (scaffolding new plugins, validating manifests, b
 /plugin install plugin-dev
 ```
 
-This marketplace (`bouch-plugins`) focuses on UK-specific application plugins. `plugin-dev` focuses on authoring tools. They complement, they don't compete.
+This marketplace (`bouch-plugins`) provides BOUCH development, game and character plugins alongside UK-specific domain plugins. `plugin-dev` focuses on authoring tools. They complement, they don't compete.
 
 ## What's in the marketplace
 
+Versions are as in the Claude manifest. `bouch-agent-core` and `bouch-audio` are pinned by tag/commit rather than versioned in this repository.
+
+| Plugin | Version | Catalogue | Area |
+|--------|---------|-----------|------|
+| `bouch-supervision` | 0.1.1 | OpenAI + Claude | Development supervision and continuity |
+| `bouch-engineering` | 0.1.0 | OpenAI + Claude | Engineering evidence assessment |
+| `bouch-character-performance` | 0.1.0 | OpenAI + Claude | Character design, voice and performance |
+| `bouch-game-assets` | 0.1.1 | OpenAI + Claude | Game and 3D asset evidence loop |
+| `legal-os` | 1.0.0 | OpenAI + Claude | UK legal research |
+| `property` | 1.0.0 | OpenAI + Claude | UK property investment |
+| `foundations` | 1.0.0 | OpenAI + Claude | Ten-skill sampler |
+| `bouch-agent-core` | pin `v0.2.4` | Claude only, external | Agent methodology (Core) |
+| `bouch-audio` | pin `v0.2.0` | Claude only, external | Audio production knowledge |
+
+### bouch-supervision and bouch-engineering (BOUCH development plugins)
+
+Two independent development plugins, each usable on its own:
+
+| Plugin | What it is |
+|--------|------------|
+| `bouch-supervision` | Helps a supervisor recover project context, choose whether to work directly or delegate, inspect outcomes and carry work across sessions |
+| `bouch-engineering` | A narrowly triggered evidence-assessment skill (`engineering-evidence`) for coding agents: assess the provenance and strength of evidence before drawing conclusions |
+
+Neither requires `bouch-agent-core` (Core), the BOUCH Registry, Runner, Notion, Eve, an MCP server, or the other plugin. Core and the Registry are optional for both. Install either, both, or neither.
+
+```
+/plugin install bouch-supervision@bouch-plugins
+/plugin install bouch-engineering@bouch-plugins
+```
+
+Each has a portable root `plugin.json` and a Claude manifest under `.claude-plugin/`; supervision also keeps a `.codex-plugin/plugin.json` overlay. The evidence-assessment skill is a first experiment; its added value over native agents has not been proven. See [plugins/BOUCH-DEVELOPMENT.md](plugins/BOUCH-DEVELOPMENT.md) for install, validation, the existing-capability audit and verification notes. A cloud copy of supervision was observed in ChatGPT Work and a user reported using it there; neither establishes GitHub sync or import of this repository.
+
+---
+
+### bouch-character-performance (v0.1.0)
+
+Reusable guidance (the `character-performance` skill) for developing, voicing, animating and reviewing a character for visual or audio storytelling. It assumes no particular art style, voice provider, animation model or production stack. It has a root `plugin.json`, a Claude manifest and a Codex overlay, and ships no MCP configuration. No dependency on Core or the Registry is declared.
+
+```
+/plugin install bouch-character-performance@bouch-plugins
+```
+
+---
+
+### bouch-game-assets (v0.1.1)
+
+Evidence-led game and 3D asset production: the `game-asset-evidence-loop` skill, candidate lineage and bounded repair guidance, templates, and a project-independent close-out validator. Engine-agnostic; the consuming project owns its `/prime`, contract, adapters and runtime harness.
+
+Its README recommends loading it alongside `bouch-agent-core`, which supplies the Registry MCP connection, so that is the setup to use when you want Registry access:
+
+```
+/plugin install bouch-agent-core@bouch-plugins
+/plugin install bouch-game-assets@bouch-plugins
+```
+
+The plugin's validator tests (`python3 -m unittest discover -s tests -v`, from `plugins/bouch-game-assets`) cover the close-out validator. They do not establish the plugin's complete runtime requirements, so this README does not claim a proven hard dependency on Core or the Registry. The plugin README's own example installs both at `--scope user`; see [Checking a Bouch host](#checking-a-bouch-host) for how that interacts with the doctor.
+
+---
+
 ### property (v1.0.0)
 
-7 skills backed by real Land Registry, Rightmove, and EPC data. The focused property investor toolkit.
+7 skills backed by Land Registry, Rightmove, and EPC data. The focused property investor toolkit.
 
 ```
 /plugin install property@bouch-plugins
@@ -50,7 +135,7 @@ This marketplace (`bouch-plugins`) focuses on UK-specific application plugins. `
 | `property-quick-comps` | Median price, transaction count, price per sqft for a postcode |
 | `reduced-listings` | Motivated-seller finder — price cuts, time on market, restricted buyer pools |
 
-MCP: `property-shared.fly.dev` (Land Registry, Rightmove, EPC register, SDLT). No API key.
+MCP: the plugin's `.mcp.json` points at `property-shared.fly.dev` (Land Registry, Rightmove, EPC register, SDLT) with no API key configured. That is configuration; this README does not verify the service is currently available. The plugin has a Claude manifest but no Codex overlay, although the OpenAI catalogue lists it.
 
 ---
 
@@ -71,25 +156,41 @@ The BOUCH Skills Foundations pack. 10 curated skills demonstrating distinct patt
 | `humaniser` | Guardrail pattern | Non-MCP. Strips AI writing patterns from business text |
 | `bouch-voice` | Style enforcement + skill chaining | Non-MCP. Applies BOUCH brand voice, internally calls humaniser first |
 
-All skills follow the open [Agent Skills specification](https://agentskills.io/specification) and are portable across any compliant agent (35+ listed at [agentskills.io/clients](https://agentskills.io/clients)) — Claude Code, claude.ai, Codex, Cursor, Gemini CLI, GitHub Copilot, VS Code, Goose, Roo Code, and others. None of them are prompt templates dressed up as skills.
+Its `.mcp.json` declares a `ledgerhall` server, and it has a Codex overlay. In a Codex test, enabling both `foundations` and `legal-os` produced a duplicate-`ledgerhall` warning (Codex skipped one declaration; both point at the same endpoint). That duplicate-name issue is unresolved. In a live Codex session with both plugins enabled, Codex logged the duplicate selection and then used the selected `ledgerhall` server for one read-only GOV.UK search, which succeeded; separately, direct `fastmcp` listed 76 tools on the live endpoint. A second, independent isolated Codex run with `legal-os` alone enabled also successfully called `ledgerhall` `gov_govuk_search` (bank holidays, count 1) and logged no duplicate warning. So the evidence is two single read-only search calls (one with both plugins enabled, one with `legal-os` alone) plus a tool listing. A `foundations`-alone run is not recorded, and none of this shows that every skill, other tools, or the other `ledgerhall` endpoints and skills work. See [plugins/BOUCH-DEVELOPMENT.md](plugins/BOUCH-DEVELOPMENT.md).
+
+The skills use the open [Agent Skills specification](https://agentskills.io/specification) `SKILL.md` format, which many agents support (see [agentskills.io/clients](https://agentskills.io/clients)). The format is shared; runtime tool names and MCP integration differ by client and must be verified in the one you use. None of them are prompt templates dressed up as skills.
 
 ---
 
-### bouch-agent-core and bouch-audio (external sources)
+### legal-os (v1.0.0)
 
-These two are listed here for installation only. Their Skills and knowledge live in their own repositories, and each marketplace entry pins a qualified release tag and commit there.
+7 skills for UK legal research: legislation lookup, case law, HMRC/VAT guidance, parliamentary intent, MP research and full legal briefs with OSCOLA citations. Six skills are configured for the Ledgerhall MCP endpoint (pre-wired in the plugin's `.mcp.json`); `bailii-case-law` needs a locally running BAILII MCP server. In Codex, a read-only `gov_govuk_search` call through `ledgerhall` succeeded with `legal-os` enabled alone (no duplicate warning) and with `foundations` also enabled (see `foundations`); these are single calls, so per-skill activation and the other tools are unverified. See the [plugin README](plugins/legal-os/README.md).
+
+```
+/plugin install legal-os@bouch-plugins
+```
+
+---
+
+### bouch-agent-core and bouch-audio (external sources, Claude catalogue only)
+
+These two appear only in the Claude catalogue, are optional, and are listed here for installation only. Neither is required by the development plugins above. Their Skills and knowledge live in their own repositories, and each marketplace entry pins a qualified release tag and commit there.
 
 | Plugin | Canonical source | What it is |
 |--------|------------------|------------|
 | `bouch-agent-core` | [paulieb89/bouch-agent-core](https://github.com/paulieb89/bouch-agent-core) | Portable agent-development methodology: harness extension, environment recon, `/prime` authoring, evidence freeze |
 | `bouch-audio` | [paulieb89/bouch-audio](https://github.com/paulieb89/bouch-audio) | Portable audio production knowledge: electronic production, mixing and mastering, audio verification |
 
-**These two install at different scopes, and `bouch-doctor` enforces the
-difference.** `bouch-agent-core` is the host plugin and belongs user-wide.
-`bouch-audio` is domain knowledge, and domain knowledge is reached through
-the Registry on demand or enabled inside the project that needs it —
-installing it user-wide makes every unrelated session carry it, and the
-doctor reports it as a failure (`domain plugins installed user-wide`).
+**Historical doctor expectations, not universal requirements.** In the
+Core/Registry architecture that `bouch-doctor` (optional, below) encodes,
+`bouch-agent-core` is the host plugin and is expected user-wide, and
+`bouch-audio` is treated as domain knowledge, reached through the Registry on
+demand or enabled inside the project that needs it. The reasoning was that
+installing domain knowledge user-wide makes every unrelated session carry it,
+and the doctor reports that as a failure (`domain plugins installed
+user-wide`). Neither scope is required of every user or project; follow your
+own project's or user's authorisation and installation choices. The example
+below shows that doctor-oriented arrangement.
 
 ```
 # Host methodology — user-wide, once per machine
@@ -112,45 +213,80 @@ Verified against Claude Code 2.1.278.
 
 ## Directory structure
 
+Reflects this checkout. There are seven local plugin roots under `plugins/`; `bouch-agent-core` and `bouch-audio` live in their own repositories and have no directory here. Skill directories are listed by name only.
+
 ```
 bouch-plugins/
 ├── README.md
-├── LICENSE
-├── .claude-plugin/
-│   └── marketplace.json
+├── DEVELOPMENT.md                    ← maintainer notes
+├── .agents/plugins/marketplace.json  ← OpenAI/Codex catalogue (7 entries)
+├── .claude-plugin/marketplace.json   ← Claude catalogue (9 entries)
+├── doctor/bouch-doctor               ← optional host-architecture check
+├── guide/                            ← BOUCH Skills Guide (md + pdf, own LICENSE.txt)
 └── plugins/
-    ├── property/                    ← UK Property Investor plugin
+    ├── BOUCH-DEVELOPMENT.md          ← development plugins: install, audit, verification
+    ├── bouch-supervision/
+    │   ├── plugin.json
     │   ├── .claude-plugin/plugin.json
-    │   ├── .mcp.json                ← property-shared.fly.dev
+    │   ├── .codex-plugin/plugin.json
+    │   └── skills/bouch-supervision/
+    ├── bouch-engineering/
+    │   ├── plugin.json
+    │   ├── .claude-plugin/plugin.json
+    │   └── skills/engineering-evidence/
+    ├── bouch-character-performance/
+    │   ├── plugin.json
+    │   ├── .claude-plugin/plugin.json
+    │   ├── .codex-plugin/plugin.json
+    │   └── skills/character-performance/
+    ├── bouch-game-assets/
+    │   ├── plugin.json
+    │   ├── .claude-plugin/plugin.json
+    │   ├── LICENSE
     │   ├── README.md
-    │   └── skills/
-    │       ├── property-report/     ← full gold structure (references/, assets/, scripts/)
-    │       ├── deal-screener/       ← full gold structure
-    │       ├── investment-summary/
-    │       ├── rightmove-investment-finder/
-    │       ├── rightmove-quick-search/
-    │       ├── property-quick-comps/
-    │       └── reduced-listings/
-    └── foundations/                 ← 10-skill sampler across verticals
+    │   ├── assets/  evals/  references/  tests/  tools/
+    │   └── skills/game-asset-evidence-loop/
+    ├── legal-os/
+    │   ├── .claude-plugin/plugin.json
+    │   ├── .codex-plugin/plugin.json
+    │   ├── .mcp.json                 ← Ledgerhall endpoint
+    │   ├── LICENSE
+    │   ├── README.md
+    │   └── skills/                   ← 7: bailii-case-law, hmrc-tax-vat, legal-how-to,
+    │                                    legal-research, legislation-lookup, mp-dig,
+    │                                    policy-briefing
+    ├── property/
+    │   ├── .claude-plugin/plugin.json
+    │   ├── .mcp.json                 ← property-shared.fly.dev
+    │   ├── README.md
+    │   └── skills/                   ← 7: deal-screener, investment-summary,
+    │                                    property-quick-comps, property-report,
+    │                                    reduced-listings, rightmove-investment-finder,
+    │                                    rightmove-quick-search
+    └── foundations/
         ├── .claude-plugin/plugin.json
-        ├── .mcp.json                ← Ledgerhall unified proxy
+        ├── .codex-plugin/plugin.json
+        ├── .mcp.json                 ← Ledgerhall endpoint
+        ├── LICENSE
         ├── README.md
-        └── skills/
-            ├── bouch-voice/
-            ├── company-check/
-            ├── cultural-intelligence/
-            ├── deal-screener/
-            ├── humaniser/
-            ├── legal-research/
-            ├── mp-dig/
-            ├── pitch-research/
-            ├── property-report/
-            └── workflow-auditor/
+        └── skills/                   ← 10: bouch-voice, company-check, cultural-intelligence,
+                                         deal-screener, humaniser, legal-research, mp-dig,
+                                         pitch-research, property-report, workflow-auditor
 ```
+
+There is no repository-root `LICENSE` file in this checkout. Of the plugins, only `foundations`, `legal-os` and `bouch-game-assets` carry a `LICENSE`.
 
 ## Checking a Bouch host
 
-`doctor/bouch-doctor` is a read-only check that a Claude Code host matches the Bouch runtime architecture: bouch-agent-core and the Bouch Registry are user-wide, domain knowledge is reached through the Registry on demand, and workbench capabilities stay in their projects. It reads expectations from this marketplace, the live Registry and Claude Code itself. The only local input is a checkout map at `~/.config/bouch/doctor.json`.
+**Relevant only if you use the Core/Registry architecture.** `doctor/bouch-doctor` is optional. It is not needed for the development plugins, `bouch-character-performance`, `legal-os`, `property` or `foundations`, nor for Codex installs. It matters for Claude Code hosts that use `bouch-agent-core` and the Bouch Registry, which is the setup the `bouch-game-assets` README recommends.
+
+It is a read-only check: it writes, installs and repairs nothing, and exits 1 if any check fails. It verifies that a Claude Code host matches the Core/Registry runtime architecture: `bouch-agent-core` and the Bouch Registry MCP server are user-wide, domain knowledge is reached through the Registry on demand, and workbench capabilities stay in their projects. It reads expectations from the `bouch-plugins` marketplace as registered in Claude Code, the live Registry (`registry.bouch.dev`, so it needs network access and that service to be up) and Claude Code itself. The only local input is a checkout map at `~/.config/bouch/doctor.json`.
+
+Behaviour to be aware of:
+
+- It fails if the `bouch-plugins` marketplace is not registered or does not list `bouch-agent-core`.
+- It treats every `bouch-plugins` plugin other than `bouch-agent-core` as domain knowledge, and reports an enabled **user-scope** install of one as `domain plugins installed user-wide`. By its logic that covers `bouch-supervision`, `bouch-engineering` and `bouch-game-assets` as well as `bouch-audio`. This encodes the Core/Registry model; it is not a statement that those plugins are defective. If you do not use that model, ignore the check or install project-scoped.
+- `--full` starts fresh headless Claude sessions and uses API credit.
 
 ```
 doctor/bouch-doctor          # local state and live Registry, a few seconds
@@ -162,13 +298,19 @@ See `doctor/bouch-doctor --help` for the checkout map format.
 
 ## Release and propagation lifecycle
 
-How a local improvement becomes a release that existing consumers actually
-receive. This is a description of what Web v0.2.0 and Audio v0.2.0 did, not
-a proposal, and there is deliberately no automation: each stage is a
-decision, and the platform already provides the mechanics.
+This applies to capabilities distributed through the Registry and external sources (Core, `bouch-audio`, web-workbench). The locally sourced plugins in this repository are versioned with this repository's marketplace; the Registry stage does not apply to them unless they are also distributed through a Registry record, and no such record is asserted here.
 
-The stages are distinct and it is worth not collapsing them — most of the
-ways this goes wrong are a stage being skipped rather than done badly.
+How a local improvement became a release that existing consumers actually
+received. This is an **example** drawn from the earlier Web v0.2.0 and Audio
+v0.2.0 releases. It is not a compulsory process for plugin changes: the
+steps below, including `agent-enumeration-lab` and the promotion stage, are
+what those releases did and not requirements for changing a plugin in this
+repository. There is deliberately no automation: each stage is a decision,
+and the platform already provides the mechanics.
+
+Where a release does go through these stages, they are distinct and worth not
+collapsing — most of the ways this goes wrong are a stage being skipped
+rather than done badly.
 
 **1. Knowledge promotion — is this worth promoting at all?**
 Decided in `agent-enumeration-lab` with the `promote-finding` skill, and
@@ -192,7 +334,7 @@ reference a release that is only local. Check what the remote actually has
 (`git ls-remote --tags`); the commit to pin is the **peeled** tag
 (`v0.2.0^{}`), not the tag object.
 
-**4. Registry update — discovery points at the new release.**
+**4. Registry update (only for capabilities distributed through Registry records) — discovery points at the new release.**
 Advance `source.ref` in the registry entry. The Registry is how an agent
 finds a capability it does not already know about, so a stale ref means
 fresh agents discover the old release. Convention: a record ref bump is a
@@ -203,10 +345,12 @@ the deployed service always corresponds to a release rather than a bare
 — read an entrypoint back and check the commit it reports.
 
 **5. Marketplace update — installation points at the new release.**
-Advance `ref` **and** `sha` in `.claude-plugin/marketplace.json` and push.
-This is the only place a plugin's version is pinned. Do not add a version
-to the marketplace entry when the plugin carries its own `plugin.json`;
-that version derives from the manifest.
+For externally sourced entries, advance `ref` **and** `sha` in
+`.claude-plugin/marketplace.json` and push. This is the only place such a
+plugin's version is pinned. Do not add a version to the marketplace entry
+when the plugin carries its own `plugin.json`; that version derives from the
+manifest. (Locally sourced entries in this repository do carry a `version`
+in the Claude manifest; keep it in sync with the plugin's own manifest.)
 
 **6. Consumer dependency update — existing consumers actually move.**
 Nothing pushes. A consumer that is not updated keeps running the old
@@ -227,33 +371,33 @@ copy, because that is how a superseded instrument keeps being used.
 
 **7. Fresh-consumer verification — a new agent really gets it.**
 The stage most easily skipped, because everything looks right on the
-machine that did the work. `doctor/bouch-doctor` checks the host
-architecture; `--full` additionally starts fresh headless sessions in a
-neutral directory and in each workbench and compares their capability
-surfaces, which is the only check here that observes what a new agent
-actually receives rather than what configuration claims. It uses API
-credit.
+machine that did the work. Where the Core/Registry architecture is in use,
+`doctor/bouch-doctor` checks the host architecture; `--full` additionally
+starts fresh headless sessions in a neutral directory and in each workbench
+and compares their capability surfaces, which is the only check here that
+observes what a new agent actually receives rather than what configuration
+claims. It uses API credit.
 
 Whatever the stage, prefer reading the running artifact over the
 documentation that describes it.
 
 ## Future plugins
 
-Planned additions (not yet built):
+Vertical roadmap. `property` and `legal-os` already exist in this checkout; the remaining rows are planned additions (not yet built):
 
 | Plugin | Vertical | Status |
 |--------|----------|--------|
-| `property` | UK Property Investor OS — 7 property skills + `.mcp.json` for property-shared | **Live** |
-| `legal` | UK Legal Research OS — 4 legal skills + `.mcp.json` for uk-legal-mcp + `/legal:*` slash commands | Planned, week 3 |
+| `property` | UK Property Investor OS — 7 property skills + `.mcp.json` for property-shared | Present in this checkout |
+| `legal-os` | UK Legal Research OS — 7 legal skills + `.mcp.json` for Ledgerhall | Present in this checkout |
 | `due-diligence` | UK Due Diligence OS — DD skills + `.mcp.json` for uk-due-diligence-mcp + `/dd:*` slash commands | Planned, week 4 |
 | `p6` | UK P6 Schedule OS — 3 P6 skills + `.mcp.json` for pyp6xer-mcp | Future |
 | `pinescript` | Pine Script Strategy OS — 2 Pine skills + `.mcp.json` for pinescript-mcp | Future |
 
-Each will be free on the marketplace. The paid Gumroad products sell the **know-how layer**: installation walkthrough, playbook PDF, worked examples, decision trees, and maintainer support email. The infrastructure is free; the expertise is paid.
+Pricing and licensing for planned plugins are not settled here. The paid Gumroad products sell the **know-how layer**: installation walkthrough, playbook PDF, worked examples, decision trees, and maintainer support email.
 
 ## License
 
-MIT. See [LICENSE](./LICENSE). Plugins are free and open source. The BOUCH Gumroad products sell the guide, playbook, worked examples, and support, not the plugin files themselves.
+MIT, as declared in the Claude marketplace entries for `foundations`, `property` and `legal-os`, and shipped as a `LICENSE` file in the `foundations`, `legal-os` and `bouch-game-assets` plugin directories. This checkout has no repository-root `LICENSE` file, and the other plugins do not carry one. The guide is CC BY-NC 4.0 (see `guide/LICENSE.txt`). No licence is declared here for the other plugins, so do not assume one. The BOUCH Gumroad products sell the guide, playbook, worked examples, and support, not the plugin files themselves.
 
 ## Maintainer
 
