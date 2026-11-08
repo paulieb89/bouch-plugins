@@ -93,7 +93,7 @@
       "source": {
         "source": "url",
         "url": "https://github.com/paulieb89/bouch-agent-core.git",
-        "sha": "af8a8008432d02c453460a23b565192fd53c4319"
+        "sha": "df1d28e27c4d466558c9c46b40b5d2ca168c96d2"
       },
       "policy": {
         "installation": "AVAILABLE",

@@ -11,7 +11,7 @@ A plugin marketplace for BOUCH development plugins, game and character plugins, 
 
 ## Current state of this checkout
 
-This README describes the reconciled marketplace as intended for `main`. Both catalogues pin `bouch-agent-core` (Core) and `bouch-audio` to commits: the Claude entries pin release tags `v0.2.5` and `v0.2.0` plus their commit hashes, while the OpenAI entries pin the matching commit hashes only (Core `af8a8008432d02c453460a23b565192fd53c4319`, Audio `3d94024fad5d5f2a239864e42c3dc2727364d588`). Inspect any existing `bouch-plugins` source on your machine before adding or switching one; an older source may still carry an earlier catalogue.
+This README describes the reconciled marketplace as intended for `main`. Both catalogues pin `bouch-agent-core` (Core) and `bouch-audio` to commits: the Claude entries pin release tags `v0.2.6` and `v0.2.0` plus their commit hashes, while the OpenAI entries pin the matching commit hashes only (Core `df1d28e27c4d466558c9c46b40b5d2ca168c96d2`, Audio `3d94024fad5d5f2a239864e42c3dc2727364d588`). Inspect any existing `bouch-plugins` source on your machine before adding or switching one; an older source may still carry an earlier catalogue.
 
 Two catalogues live in this repository. They share a name and list the same nine plugins:
 
@@ -69,7 +69,7 @@ Versions are as in the Claude manifest. `bouch-agent-core` and `bouch-audio` are
 | `legal-os` | 1.0.0 | OpenAI + Claude | UK legal research |
 | `property` | 1.0.0 | OpenAI + Claude | UK property investment |
 | `foundations` | 1.0.0 | OpenAI + Claude | Ten-skill sampler |
-| `bouch-agent-core` | pin `v0.2.5` | OpenAI + Claude, external | Agent methodology (Core) |
+| `bouch-agent-core` | pin `v0.2.6` | OpenAI + Claude, external | Agent methodology (Core) |
 | `bouch-audio` | pin `v0.2.0` | OpenAI + Claude, external | Audio production knowledge |
 
 ### bouch-supervision and bouch-engineering (BOUCH development plugins)
@@ -209,7 +209,7 @@ release it was qualified against. A project that needs that guarantee
 should declare the qualified version in its own contract and check it — see
 `audio-agent-workbench-v2` for a worked example.
 
-**Codex.** The Codex catalogue lists both as external Git root sources pinned by commit. In a fresh isolated Codex environment, the nine-entry local marketplace was discovered and both external plugins installed successfully, as versions 0.2.5 (Core) and 0.2.0 (Audio). In a separate isolated skill probe, the Codex session explicitly read one Core skill (`handoff-authoring`) and one Audio skill (`audio-verification`); this does not show that every Core or Audio skill was exercised. That probe had no Registry tool, so it says nothing about Registry access from Codex. A user's own environment may have a separately configured Registry; that is local state outside this repository. Whether and how to wire the Registry for Codex is a later decision, and the catalogue entries add no MCP configuration.
+**Codex.** The Codex catalogue lists both as external Git root sources pinned by commit. In a fresh isolated Codex environment, the nine-entry local marketplace was discovered and both external plugins installed successfully, as versions 0.2.5 (Core) and 0.2.0 (Audio). In a separate isolated skill probe, the Codex session explicitly read one Core skill (`handoff-authoring`) and one Audio skill (`audio-verification`); this does not show that every Core or Audio skill was exercised. That earlier probe had no Registry tool, so it says nothing about Registry access. A later isolated Codex candidate with a portable `mcp.json` called the live Registry successfully, and Claude called it via its existing manifest. ChatGPT Work Registry integration remains untested. A later isolated Codex installation fetched published Core v0.2.6 from GitHub using the updated marketplace entry and successfully queried the live Registry. A user's own environment may have a separately configured Registry; that is local state outside this repository.
 
 Verified against Claude Code 2.1.278.
 
