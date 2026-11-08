@@ -64,7 +64,7 @@ Versions are as in the Claude manifest. `bouch-agent-core` and `bouch-audio` are
 |--------|---------|-----------|------|
 | `bouch-supervision` | 0.1.1 | OpenAI + Claude | Development supervision and continuity |
 | `bouch-engineering` | 0.1.0 | OpenAI + Claude | Engineering evidence assessment |
-| `bouch-character-performance` | 0.1.0 | OpenAI + Claude | Character design, voice and performance |
+| `bouch-character-performance` | 0.1.1 | OpenAI + Claude | Character design, voice and performance |
 | `bouch-game-assets` | 0.1.1 | OpenAI + Claude | Game and 3D asset evidence loop |
 | `legal-os` | 1.0.0 | OpenAI + Claude | UK legal research |
 | `property` | 1.0.0 | OpenAI + Claude | UK property investment |
@@ -92,7 +92,7 @@ Each has a portable root `plugin.json` and a Claude manifest under `.claude-plug
 
 ---
 
-### bouch-character-performance (v0.1.0)
+### bouch-character-performance (v0.1.1)
 
 Reusable guidance (the `character-performance` skill) for developing, voicing, animating and reviewing a character for visual or audio storytelling. It assumes no particular art style, voice provider, animation model or production stack. It has a root `plugin.json`, a Claude manifest and a Codex overlay, and ships no MCP configuration. No dependency on Core or the Registry is declared.
 

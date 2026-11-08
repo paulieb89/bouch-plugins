@@ -11,6 +11,7 @@ Create a character that serves the brief, can be produced with available assets 
 
 - Establish the character's role, personality, audience and medium. Define visual and vocal traits that distinguish them from the other characters. Use references with clear provenance and check rights for intended use.
 - Create or select a reviewable reference; retain the approved reference, key traits, voice choice, relevant settings and evidence in the project. A flat image is not a rig; verify what can actually be animated.
+- For a returning character, look for previously selected references, voices and settings and reuse them when they suit the brief; a new audition or redesign is not needed by default. Check that planned and actual production inputs (image, voice ID, model, settings) match the recorded selections, and note any deliberate change.
 - Where identity across scenes matters, test repeatability with the same character and compare outputs with the approved reference. Assess likeness and texture, clothing, eyes, mouth and unintended added features. For an ensemble, check that characters remain visually distinct in the same setting.
 
 ## Give the character a voice and performance

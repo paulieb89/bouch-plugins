@@ -107,7 +107,7 @@
       "name": "bouch-character-performance",
       "source": "./plugins/bouch-character-performance",
       "description": "Reusable character design, voice, performance and review guidance.",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "category": "skills"
     },
     {
