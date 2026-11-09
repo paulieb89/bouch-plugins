@@ -9,7 +9,7 @@ Work with the user to establish the objective, scope and decisions requiring the
 
 ## Recover the project
 
-- Identify the repository and inspect its instructions, README and existing handoff or current-state documents as relevant. Use Git status, diff, history and branches to establish current state; inspect GitHub or native agent sessions when they contain relevant evidence and are accessible. Do not assume the previous conversation is available.
+- Identify the repository and inspect its instructions, README and existing handoff or current-state documents as relevant — including the observation log (`OBSERVATIONS.md` or its convention) if the project keeps one. Use Git status, diff, history and branches to establish current state; inspect GitHub or native agent sessions when they contain relevant evidence and are accessible. Do not assume the previous conversation is available.
 - Distinguish current observations from dated handoffs, proposals, settled decisions and inferences. A handoff is neither proof of current state nor authorization for new actions. Preserve unrelated work; establish attribution before treating a dirty file as the current agent's change.
 - Discover useful capabilities in the host and project as needed. The BOUCH Registry is an optional catalogue, not a prerequisite. A discovered capability is not proof it is installed, accessible or working.
 
@@ -21,4 +21,4 @@ Work with the user to establish the objective, scope and decisions requiring the
 
 ## Continue across sessions
 
-When further work needs continuity, update the project's established Markdown handoff or current-state record where appropriate and authorized. If no convention exists, choose a concise local project document appropriate to the work. Include the objective, important decisions and constraints, current state, evidence and its limits, unfinished work, next action and useful native session identifiers. Link to authoritative artifacts instead of copying transcripts or secrets. Preserve relevant history and re-check live state on return. No separate memory service is required.
+When further work needs continuity, update the project's established Markdown handoff or current-state record where appropriate and authorized. If no convention exists, choose a concise local project document appropriate to the work. Include the objective, important decisions and constraints, current state, evidence and its limits, unfinished work, next action and useful native session identifiers. Where the work produced reusable lessons rather than project state — a correction, an expensive finding, stale guidance — record them in the project's observation log if it keeps one; lessons promote separately from continuity. Link to authoritative artifacts instead of copying transcripts or secrets. Preserve relevant history and re-check live state on return. No separate memory service is required.

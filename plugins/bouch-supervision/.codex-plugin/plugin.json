@@ -1,6 +1,6 @@
 {
   "name": "bouch-supervision",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "BOUCH development supervision, project recovery and continuity.",
   "author": {
     "name": "Paul Boucherat"
