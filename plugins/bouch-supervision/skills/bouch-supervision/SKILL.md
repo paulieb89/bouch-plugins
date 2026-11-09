@@ -16,7 +16,7 @@ Work with the user to establish the objective, scope and decisions requiring the
 ## Execute and inspect
 
 - Choose a direct approach or delegate selectively when the task, authorization and available native capabilities support it. Claude Code, Codex and other available workers such as Eve operate independently with their own tools, permissions and judgment. No particular runner, provider or methodology is required.
-- For a delegated task, provide the objective, location, scope, applicable decisions, constraints, acceptance criteria and relevant evidence. Confirm the worker can access what it needs; do not assume supervisor connections transfer. Record native session identifiers when useful for observation or continuation.
+- For a delegated task, provide the objective, location, scope, applicable decisions, constraints, acceptance criteria and relevant evidence — including the project's observation log if it keeps one. Confirm the worker can access what it needs; do not assume supervisor connections transfer. Record native session identifiers when useful for observation or continuation.
 - Inspect the actual changes and relevant test results or artifacts, and distinguish what was run from what was reported. Investigate failures and pursue authorized corrections. Report what was verified, what remains uncertain and any decisions that need the user.
 
 ## Continue across sessions
