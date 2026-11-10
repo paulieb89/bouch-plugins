@@ -62,7 +62,7 @@ Versions are as in the Claude manifest. `bouch-agent-core` and `bouch-audio` are
 
 | Plugin | Version | Catalogue | Area |
 |--------|---------|-----------|------|
-| `bouch-supervision` | 0.1.1 | OpenAI + Claude | Development supervision and continuity |
+| `bouch-supervision` | 0.1.2 | OpenAI + Claude | Development supervision and continuity |
 | `bouch-engineering` | 0.1.0 | OpenAI + Claude | Engineering evidence assessment |
 | `bouch-character-performance` | 0.1.1 | OpenAI + Claude | Character design, voice and performance |
 | `bouch-game-assets` | 0.1.1 | OpenAI + Claude | Game and 3D asset evidence loop |
