@@ -1,0 +1,636 @@
+#!/usr/bin/env python3
+"""Resolve a Bouch capability to a concrete install plan and apply it.
+
+The act layer next to bouch-doctor: doctor checks what a host already has;
+bouch-act performs the record-to-installed hop. The remote Registry stays a
+read-only pointer service — this tool consumes pointers, it never writes
+them.
+
+  - `plan` resolves a record id or free-text query against the deployed
+    Registry (and the local bouch-registry checkout when one is mapped) and
+    prints the exact commands and file writes for each detected harness.
+  - `apply` re-displays the plan, asks for confirmation, backs up any file it
+    edits, then runs the steps. `--yes` skips the prompt for dev.bouch
+    records only; external (public-registry / GitHub) hits always require an
+    interactive confirmation because they are not estate-vetted.
+  - `status` shows which Registry capabilities are installed where.
+
+Local checkouts come from the same map bouch-doctor uses:
+
+    ~/.config/bouch/doctor.json   {"checkouts": {"<repository>": "<path>", ...}}
+    --checkout <repository>=<path>   (repeatable; overrides the file)
+
+Nothing is deployed, pushed, or written to any remote. Config edits are
+backed up to <file>.bak-<timestamp> first. Secrets are never written — the
+plan names the ~/.env slot to fill instead.
+"""
+
+import argparse
+import getpass
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+REGISTRY_JSON_URL = "https://registry.bouch.dev/registry.json"
+MARKETPLACE_REPO = "paulieb89/bouch-plugins"
+MARKETPLACE = "bouch-plugins"
+MCP_REGISTRY_URL = "https://registry.modelcontextprotocol.io/v0/servers"
+GITHUB_SEARCH_URL = "https://api.github.com/search/repositories"
+
+HOME = Path.home()
+CONFIG = HOME / ".config" / "bouch" / "doctor.json"
+CACHE = HOME / ".cache" / "bouch"
+CACHE_TTL = 900  # seconds
+
+CLAUDE_DIR = HOME / ".claude"
+CODEX_DIR = HOME / ".codex"
+DEVIN_CONFIG_DIR = HOME / ".config" / "devin"
+DEVIN_MCP_JSON = DEVIN_CONFIG_DIR / "mcp_config.json"
+
+# Devin's CLI mis-detects auth inside IDE-spawned shells carrying these vars.
+DEVIN_ENV_STRIP = [
+    "ACP_BACKEND", "DEVIN_FD_PATH", "WINDSURF_EXT_HOST_PID",
+    "WINDSURF_CODEIUM_DIR", "WINDSURF_IDE_TYPE", "AI_AGENT",
+]
+
+HARNESSES = ("claude", "codex", "devin")
+
+
+# ------------------------------------------------------------------ helpers
+
+
+def run(cmd, cwd=None, timeout=120, env=None):
+    try:
+        p = subprocess.run(
+            cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout,
+            stdin=subprocess.DEVNULL, env=env,
+        )
+        return p.returncode, p.stdout, p.stderr
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, "", str(e)
+
+
+def run_devin(cmd, **kw):
+    env = dict(os.environ)
+    for var in DEVIN_ENV_STRIP:
+        env.pop(var, None)
+    return run(cmd, env=env, **kw)
+
+
+def load_json(path, default=None):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return default
+
+
+def fetch_json(url, timeout=60):
+    req = urllib.request.Request(url, headers={"user-agent": "bouch-act/1"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode())
+
+
+def norm(s):
+    return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
+
+
+# --------------------------------------------------------------------- data
+
+
+def load_checkout_map(overrides):
+    paths = dict((load_json(CONFIG, {}) or {}).get("checkouts", {}))
+    paths.update(overrides or {})
+    return {k: Path(v).expanduser() for k, v in paths.items()}
+
+
+def checkout_root(ctx):
+    """Directory clones should land in: the common parent of known checkouts."""
+    parents = {p.parent for p in ctx["checkouts"].values()}
+    if len(parents) == 1:
+        return parents.pop()
+    for p in ctx["checkouts"].values():
+        if p.name == "bouch-plugins":
+            return p.parent
+    return HOME / "dev-ai" / "bouch-repos"
+
+
+def load_records(ctx):
+    """Deployed records plus not-yet-deployed entries from a local checkout.
+
+    Returns {id: record}; each record gains `_deployed` (present on the live
+    service) so plans can flag records that only exist in the repo so far.
+    """
+    records = {}
+    cache = CACHE / "registry.json"
+    data = None
+    try:
+        data = fetch_json(REGISTRY_JSON_URL, timeout=45)
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(data))
+    except Exception as e:  # noqa: BLE001
+        ctx.setdefault("notes", []).append(f"deployed Registry unreachable ({e})")
+        if cache.is_file() and time.time() - cache.stat().st_mtime < CACHE_TTL * 24:
+            data = load_json(cache)
+            ctx.setdefault("notes", []).append("using cached registry.json")
+    if data:
+        for c in data.get("capabilities", []):
+            c["_deployed"] = True
+            records[c["id"]] = c
+
+    reg_dir = ctx["checkouts"].get("bouch-registry")
+    if reg_dir:
+        for f in sorted((Path(reg_dir) / "registry" / "entries").glob("*.json")):
+            c = load_json(f)
+            if c and c.get("id") and c["id"] not in records:
+                c["_deployed"] = False
+                records[c["id"]] = c
+    return records
+
+
+def load_marketplace(ctx):
+    """plugin name -> catalogue entry, from the checkout or GitHub main."""
+    checkout = ctx["checkouts"].get("bouch-plugins")
+    if checkout:
+        data = load_json(Path(checkout) / ".claude-plugin" / "marketplace.json")
+    else:
+        try:
+            data = fetch_json(
+                f"https://raw.githubusercontent.com/{MARKETPLACE_REPO}/main/"
+                ".claude-plugin/marketplace.json")
+        except Exception:  # noqa: BLE001
+            data = None
+    out = {}
+    for p in (data or {}).get("plugins", []):
+        out[p["name"]] = p
+    return out
+
+
+def resolve(query, records):
+    """Ranked record hits for an id or free-text query."""
+    q = query.strip().lower()
+    if q.startswith("dev.bouch/"):
+        return [records[q]] if q in records else []
+    terms = set(norm(q).split("-"))
+    scored = []
+    for cid, rec in records.items():
+        name = cid.split("/", 1)[-1]
+        hay = {name, norm(rec.get("title", "")), norm(rec["source"]["repository"])}
+        if q in {name, rec["source"]["repository"], norm(rec.get("title", ""))}:
+            scored.append((100, cid))
+            continue
+        tags = {norm(t) for t in rec.get("tags", [])}
+        score = sum(3 for t in terms if t in hay) + sum(1 for t in terms if t in tags)
+        if q in rec.get("summary", "").lower():
+            score += 2
+        if score:
+            scored.append((score, cid))
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [records[cid] for _, cid in scored]
+
+
+def plugin_name(rec, market):
+    """Marketplace plugin name for an agent-plugin record, or None."""
+    name = rec["id"].split("/", 1)[-1]
+    cands = [name, norm(rec.get("title", "")), rec["source"]["repository"],
+             f"bouch-{name}", name.removeprefix("bouch-")]
+    for c in cands:
+        if c in market:
+            return c
+    return None
+
+
+# ---------------------------------------------------------------- detection
+
+
+def detect_harnesses():
+    found = {}
+    for h in HARNESSES:
+        found[h] = bool(shutil.which(h))
+    return found
+
+
+def claude_marketplace_registered():
+    markets = load_json(CLAUDE_DIR / "plugins" / "known_marketplaces.json", {}) or {}
+    return MARKETPLACE in markets
+
+
+def codex_marketplace_registered():
+    rc, out, _ = run(["codex", "plugin", "marketplace", "list"], timeout=30)
+    return rc == 0 and MARKETPLACE in out
+
+
+# -------------------------------------------------------------------- plans
+
+
+class Step:
+    def __init__(self, desc, commands=None, writes=None, note=None):
+        self.desc = desc
+        self.commands = commands or {}      # harness -> [argv, ...]
+        self.writes = writes or []          # (path, description)
+        self.note = note
+
+
+def repo_clone_steps(rec, ctx, steps):
+    """Clone the source repo (if published) into the checkouts root.
+
+    Checkout shape follows what bouch-doctor verifies per record type:
+    adapters (mcp-server) must be on a branch tracking origin; frozen
+    evidence repositories are checked as HEAD == ref, so a detached tag
+    checkout is correct there; workbenches track the default branch.
+    """
+    url = rec["source"].get("url")
+    repo = rec["source"]["repository"]
+    mapped = ctx["checkouts"].get(repo)
+    if mapped and Path(mapped).is_dir():
+        steps.append(Step(f"checkout already mapped: {repo} -> {mapped}"))
+        return
+    if not url:
+        steps.append(Step(
+            f"no published remote for {repo}",
+            note="source.url is absent — clone manually or record is pointer-only"))
+        return
+    dest = checkout_root(ctx) / repo
+    ref = rec["source"].get("ref")
+    cmd = ["git", "clone"]
+    if rec["type"] == "evidence-repository" and ref:
+        cmd += ["--branch", ref]
+    cmd += [url, str(dest)]
+    note = "doctor.json is updated so bouch-doctor can check it"
+    if ref and rec["type"] != "evidence-repository":
+        note += f"; record cites {ref} — checkout tracks the default branch"
+    steps.append(Step(
+        f"clone {repo} -> {dest}",
+        commands={"all": [cmd]},
+        writes=[(CONFIG, "add checkout to doctor.json map")],
+        note=note))
+    return dest
+
+
+def build_plan(rec, ctx, market, harnesses):
+    """Ordered steps for one record."""
+    steps = []
+    ptype = rec["type"]
+
+    if ptype == "agent-plugin":
+        name = plugin_name(rec, market)
+        if name:
+            entry = market[name]
+            src = entry["source"]
+            local = isinstance(src, str) or (isinstance(src, dict)
+                                           and src.get("path", "").startswith("./"))
+            gh = src if isinstance(src, dict) else {}
+            pin = gh.get("ref") or gh.get("sha")
+            pin_txt = f" (marketplace pin {pin})" if pin else ""
+            # Architecture rule (bouch-doctor): only bouch-agent-core may be
+            # user-wide. Domain plugins install at local/project scope.
+            core = name == "bouch-agent-core"
+            if harnesses.get("claude"):
+                cmds = []
+                if not claude_marketplace_registered():
+                    cmds.append(["claude", "plugin", "marketplace", "add", MARKETPLACE_REPO])
+                scope = "user" if core else "local"
+                cmds.append(["claude", "plugin", "install", f"{name}@{MARKETPLACE}",
+                             "--scope", scope, "-y"])
+                steps.append(Step(f"install {name} for Claude Code{pin_txt}"
+                                  + ("" if core else f" (scope {scope} — only "
+                                                     "bouch-agent-core is user-wide)"),
+                                  commands={"claude": cmds}))
+            if harnesses.get("codex"):
+                cmds = []
+                if not codex_marketplace_registered():
+                    cmds.append(["codex", "plugin", "marketplace", "add",
+                                 f"https://github.com/{MARKETPLACE_REPO}"])
+                cmds.append(["codex", "plugin", "add", f"{name}@{MARKETPLACE}"])
+                steps.append(Step(f"install {name} for Codex{pin_txt}",
+                                  commands={"codex": cmds}))
+            if harnesses.get("devin"):
+                if local:
+                    repo, _, path = MARKETPLACE_REPO, "", src if isinstance(src, str) else src["path"]
+                    path = path.lstrip("./")
+                    source = f"{repo}#{path}"
+                else:
+                    source = gh.get("repo", rec["source"]["repository"])
+                cmd = ["devin", "plugins", "install", source] + ([] if core else ["--local"])
+                steps.append(Step(
+                    f"install {name} for Devin (tracks HEAD — no ref pin)",
+                    commands={"devin": [cmd]},
+                    note=("" if core else "--local keeps a domain plugin off the "
+                          "synced personal manifest; ") +
+                         "for a strict pin: git clone at the tag, then "
+                         "`devin plugins install <path> --local`"))
+        else:
+            url = rec["source"].get("url") or "(no published remote)"
+            steps.append(Step(
+                f"not in the {MARKETPLACE} marketplace",
+                note=f"install from source {url} per the record's own manifest, "
+                     "or add the repo as a marketplace"))
+
+    elif ptype == "mcp-server":
+        repo_clone_steps(rec, ctx, steps)
+        steps.append(Step(
+            "wire the MCP endpoint per harness",
+            note="this record carries no declared remote endpoint — the route "
+                 "is its own contract entrypoint. For a streamable-http server "
+                 "the commands are: `claude mcp add --transport http <name> "
+                 "<url>`, `codex mcp add <name> --url <url>`, or a "
+                 "mcpServers entry in ~/.config/devin/mcp_config.json"))
+
+    elif ptype in ("reference-workbench", "evidence-repository"):
+        repo_clone_steps(rec, ctx, steps)
+        steps.append(Step(
+            "capabilities stay inside the checkout",
+            note="workbenches are pointed at, not installed — skills/commands "
+                 "live under the checkout's .claude/ and .agents/ dirs"))
+
+    elif ptype == "agent-skill":
+        url = rec["source"].get("url")
+        eps = [e for e in rec.get("entrypoints", []) if e.get("role") == "skill"]
+        if url and eps:
+            ref = rec["source"].get("ref") or "HEAD"
+            for ep in eps:
+                raw = (url.rstrip("/").replace("github.com", "raw.githubusercontent.com")
+                       + f"/{ref}/{ep['path']}")
+                name = Path(ep["path"]).parent.name
+                for h, dest in (("claude", CLAUDE_DIR / "skills" / name / "SKILL.md"),
+                                ("devin", HOME / ".devin" / "skills" / name / "SKILL.md")):
+                    if harnesses.get(h):
+                        steps.append(Step(
+                            f"fetch skill {name} into {dest.parent} ({h})",
+                            commands={h: [["mkdir", "-p", str(dest.parent)],
+                                          ["curl", "-sSf", "-o", str(dest), raw]]}))
+            if harnesses.get("codex"):
+                steps.append(Step("Codex: copy the SKILL.md under .agents/skills/ "
+                                  "in the target project"))
+        else:
+            steps.append(Step(
+                "no published remote for the skill source",
+                note="fetch it from the local checkout of "
+                     f"{rec['source']['repository']} if one is mapped"))
+
+    else:  # observability-tool, remote-agent, routing-pointer
+        eps = [e["path"] for e in rec.get("entrypoints", [])][:3]
+        steps.append(Step(
+            f"no generic install route for {ptype}",
+            note="follow the record's own contract entrypoint"
+                 + (f" ({', '.join(eps)})" if eps else "")))
+
+    if not steps:
+        steps.append(Step("no applicable install steps"))
+    return steps
+
+
+def search_external(query):
+    """Public fallback hits, labelled unvetted. Best-effort."""
+    hits = []
+    try:
+        data = fetch_json(MCP_REGISTRY_URL + "?" + urllib.parse.urlencode(
+            {"search": query, "limit": 5}), timeout=20)
+        for s in data.get("servers", []):
+            srv = s.get("server", {})
+            hits.append({"src": "official-mcp-registry", "name": srv.get("name"),
+                         "desc": (srv.get("description") or "")[:160],
+                         "url": (srv.get("repository") or {}).get("url"),
+                         "version": srv.get("version")})
+    except Exception:  # noqa: BLE001
+        pass
+    for q in (f"{query} mcp-server in:name,description,topics",
+              f"topic:agent-skills {query}"):
+        try:
+            data = fetch_json(GITHUB_SEARCH_URL + "?" + urllib.parse.urlencode(
+                {"q": q, "sort": "stars", "per_page": 3}), timeout=20)
+            for r in data.get("items", []):
+                hits.append({"src": "github", "name": r["full_name"],
+                             "desc": (r.get("description") or "")[:160],
+                             "url": r["html_url"], "stars": r["stargazers_count"]})
+        except Exception:  # noqa: BLE001
+            pass
+    seen, deduped = set(), []
+    for h in hits:
+        if h["name"] not in seen:
+            seen.add(h["name"])
+            deduped.append(h)
+    return deduped
+
+
+# -------------------------------------------------------------------- output
+
+
+def print_plan(rec, steps, tier):
+    print(f"\n{rec['id']} — {rec.get('title', '')}")
+    print(f"  type: {rec['type']}   lifecycle: {rec.get('lifecycle')}")
+    src = rec["source"]
+    print(f"  source: {src['repository']}  "
+          f"{src.get('url') or '(no published remote)'}  ref: {src.get('ref') or '-'}")
+    if not rec.get("_deployed", True):
+        print("  ! record exists in local checkout only — not yet deployed "
+              "to registry.bouch.dev")
+    print(f"  trust tier: {tier}")
+    print(f"  summary: {rec.get('summary', '')[:200]}")
+    for i, s in enumerate(steps, 1):
+        print(f"\n  {i}. {s.desc}")
+        for h, cmds in s.commands.items():
+            for c in cmds:
+                label = "" if h == "all" else f"[{h}] "
+                print(f"       {label}$ {' '.join(c)}")
+        for path, why in s.writes:
+            print(f"       writes: {path} ({why})")
+        if s.note:
+            print(f"       note: {s.note}")
+
+
+def print_hits(hits):
+    for h in hits:
+        meta = f" v{h['version']}" if h.get("version") else \
+               (f" ★{h['stars']}" if h.get("stars") is not None else "")
+        print(f"  [{h['src']}] {h['name']}{meta}")
+        if h.get("desc"):
+            print(f"      {h['desc']}")
+        if h.get("url"):
+            print(f"      {h['url']}")
+
+
+# --------------------------------------------------------------------- apply
+
+
+def backup(path):
+    path = Path(path)
+    if path.is_file():
+        bak = path.with_name(path.name + f".bak-{int(time.time())}")
+        shutil.copy2(path, bak)
+        return bak
+    return None
+
+
+def add_checkout_map(repo, path):
+    data = load_json(CONFIG, {}) or {}
+    data.setdefault("checkouts", {})[repo] = str(path)
+    backup(CONFIG)
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def apply_steps(rec, steps, harness, yes, dry):
+    ran = 0
+    for s in steps:
+        cmds = []
+        for h, c in (s.commands or {}).items():
+            if h == "all" or h == harness or harness == "all":
+                cmds.extend(c)
+        for c in cmds:
+            print(f"  $ {' '.join(c)}")
+            if dry:
+                continue
+            runner = run_devin if c[0] == "devin" else run
+            rc, out, err = runner(c, timeout=300)
+            if rc != 0:
+                print(f"    FAILED ({rc}): {(err or out).strip()[:300]}")
+                return ran, False
+            if out.strip():
+                print("    " + out.strip().replace("\n", "\n    ")[:400])
+            ran += 1
+        if s.writes and not dry:
+            for path, _ in s.writes:
+                if Path(path) == CONFIG:
+                    dest = checkout_root_from_steps(s)
+                    if dest:
+                        add_checkout_map(dest[0], dest[1])
+    return ran, True
+
+
+def checkout_root_from_steps(step):
+    """Recover (repo, dest) for a clone step's doctor.json write."""
+    for c in (step.commands or {}).get("all", []):
+        if c[:2] == ["git", "clone"]:
+            return Path(c[-1]).name, c[-1]
+    return None
+
+
+# -------------------------------------------------------------------- status
+
+
+def status(ctx, market):
+    records = ctx["records"]
+    harnesses = detect_harnesses()
+
+    claude_plugins, codex_plugins, devin_plugins = "", "", ""
+    claude_mcps, codex_cfg, devin_mcps = "", "", {}
+    if harnesses["claude"]:
+        _, claude_plugins, _ = run(["claude", "plugin", "list"], timeout=60)
+        _, claude_mcps, _ = run(["claude", "mcp", "list"], timeout=60)
+    if harnesses["codex"]:
+        _, codex_plugins, _ = run(["codex", "plugin", "list"], timeout=60)
+        codex_cfg = (CODEX_DIR / "config.toml").read_text() \
+            if (CODEX_DIR / "config.toml").is_file() else ""
+    if harnesses["devin"]:
+        _, devin_plugins, _ = run_devin(["devin", "plugins", "list"], timeout=60)
+        devin_mcps = load_json(DEVIN_MCP_JSON, {}) or {}
+
+    for cid, rec in sorted(records.items()):
+        state = []
+        if rec["type"] == "agent-plugin":
+            name = plugin_name(rec, market) or cid.split("/")[-1]
+            if harnesses["claude"]:
+                hit = re.search(rf"(?m)^[^\n]*\b{re.escape(name)}@", claude_plugins)
+                state.append("claude:" + ("yes" if hit else "no"))
+            if harnesses["codex"]:
+                hit = re.search(rf"(?m)^\s*{re.escape(name)}@\S+\s+installed", codex_plugins)
+                state.append("codex:" + ("yes" if hit else "no"))
+            if harnesses["devin"]:
+                hit = re.search(rf"(?m)^.*\b{re.escape(name)}\s+v?\d", devin_plugins)
+                state.append("devin:" + ("yes" if hit else "?"))
+        elif rec["type"] == "mcp-server":
+            name = cid.split("/")[-1]
+            if harnesses["claude"]:
+                state.append("claude:" + ("yes" if name in claude_mcps else "no"))
+            if harnesses["codex"]:
+                state.append("codex:" + ("yes" if f"[mcp_servers.{name}]" in codex_cfg else "no"))
+            if harnesses["devin"]:
+                state.append("devin:" + ("yes" if name in devin_mcps.get("mcpServers", {}) else "no"))
+        else:
+            co = ctx["checkouts"].get(rec["source"]["repository"])
+            state.append("checkout:" + (str(co) if co and Path(co).is_dir() else "none"))
+        dep = "" if rec.get("_deployed", True) else " (not deployed)"
+        print(f"  {cid}{dep}: {'  '.join(state) or 'pointer only'}")
+
+
+# ---------------------------------------------------------------------- main
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="bouch-act", description=__doc__.splitlines()[0])
+    ap.add_argument("--checkout", action="append", metavar="REPO=PATH",
+                    help="override the doctor.json checkout map")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("plan", "apply", "status"):
+        p = sub.add_parser(name)
+        if name != "status":
+            p.add_argument("query", help="record id (dev.bouch/x) or free text")
+        if name == "apply":
+            p.add_argument("--harness", choices=[*HARNESSES, "all"], default="all")
+            p.add_argument("--yes", action="store_true",
+                           help="skip confirmation (dev.bouch records only)")
+            p.add_argument("--dry-run", action="store_true",
+                           help="print commands without executing")
+    args = ap.parse_args()
+
+    overrides = dict(kv.split("=", 1) for kv in (args.checkout or []))
+    ctx = {"checkouts": load_checkout_map(overrides)}
+    ctx["records"] = load_records(ctx)
+    market = load_marketplace(ctx)
+
+    for n in ctx.get("notes", []):
+        print(f"· {n}")
+
+    if args.cmd == "status":
+        status(ctx, market)
+        return 0
+
+    hits = resolve(args.query, ctx["records"])
+    if not hits:
+        print(f"no dev.bouch record matches {args.query!r}")
+        ext = search_external(args.query)
+        if ext:
+            print("\nexternal candidates (UNVETTED — not estate-reviewed):")
+            print_hits(ext)
+            print("\nreview the source, then install via the harness's native "
+                  "command — bouch-act does not apply external items")
+        return 2
+    if len(hits) > 1 and not args.query.startswith("dev.bouch/"):
+        print("multiple matches — re-run with the exact id:")
+        for h in hits:
+            print(f"  {h['id']}  ({h['type']}) {h.get('title', '')}")
+        return 2
+
+    rec = hits[0]
+    steps = build_plan(rec, ctx, market, detect_harnesses())
+    print_plan(rec, steps, "dev.bouch (curated)")
+    if args.cmd == "plan":
+        return 0
+
+    if not args.yes and not args.dry_run:
+        try:
+            if input("\napply these steps? [y/N] ").strip().lower() not in ("y", "yes"):
+                print("aborted")
+                return 1
+        except (EOFError, KeyboardInterrupt):
+            print("\naborted")
+            return 1
+
+    ran, ok = apply_steps(rec, steps, args.harness, args.yes, args.dry_run)
+    if args.dry_run:
+        print("\n(dry run — nothing executed)")
+        return 0
+    print(f"\n{'done' if ok else 'stopped'}: {ran} command(s) ran. "
+          "Verify: re-run `bouch-act status` or `bouch-doctor`.")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
