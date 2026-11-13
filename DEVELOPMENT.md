@@ -148,6 +148,9 @@ None is compulsory. `claude plugin validate`, `codex plugin ...` and Anthropic's
 [plugin-dev](https://github.com/anthropics/claude-code/tree/main/plugins/plugin-dev)
 (`plugin-validator`, `skill-reviewer`) help when they fit. `doctor/bouch-doctor`
 is an optional read-only host check (see the README), not a release gate.
+`doctor/bouch-act` is its sibling act layer: resolves a Registry record to
+per-harness install steps and applies them with consent — same checkout map,
+same optional status.
 
 ## Foundations skill sources
 

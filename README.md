@@ -225,6 +225,7 @@ bouch-plugins/
 ├── .agents/plugins/marketplace.json  ← OpenAI/Codex catalogue (9 entries)
 ├── .claude-plugin/marketplace.json   ← Claude catalogue (9 entries)
 ├── doctor/bouch-doctor               ← optional host-architecture check
+├── doctor/bouch-act                  ← optional act layer: record → install plan → apply
 ├── guide/                            ← BOUCH Skills Guide (md + pdf, own LICENSE.txt)
 └── plugins/
     ├── BOUCH-DEVELOPMENT.md          ← development plugins: install, audit, verification
@@ -298,6 +299,32 @@ doctor/bouch-doctor --full   # plus every declared entrypoint, remote source ver
 ```
 
 See `doctor/bouch-doctor --help` for the checkout map format.
+
+## Acting on a discovered capability
+
+`doctor/bouch-act` is the optional act layer next to `bouch-doctor`: doctor
+checks what a host already has; `bouch-act` performs the record-to-installed
+hop. It resolves a Registry record (or free-text query) to the concrete
+install commands for each detected harness — Claude Code, Codex and Devin —
+shows them, then applies on confirmation, backing up any config file it
+edits. The remote Registry stays read-only; all acting is local.
+
+```
+doctor/bouch-act plan dev.bouch/reaper-mcp   # show the resolved steps, run nothing
+doctor/bouch-act apply dev.bouch/reaper-mcp  # confirm, back up, run
+doctor/bouch-act status                      # which records are installed where
+```
+
+Behaviour to be aware of:
+
+- Only `bouch-agent-core` installs at user scope; domain plugins are planned
+  at `local` scope so a `bouch-doctor` host stays green.
+- For plugins the marketplace pin wins over a record's citation `ref`.
+- On a Registry miss it also searches the official MCP Registry and GitHub
+  and lists hits as **external (unvetted)** — shown for review only, never
+  applied.
+- It shares the `~/.config/bouch/doctor.json` checkout map with
+  `bouch-doctor`, and writes new clones into it so doctor can check them.
 
 ## Releasing and updating plugins
 
