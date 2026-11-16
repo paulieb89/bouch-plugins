@@ -1,0 +1,483 @@
+#!/usr/bin/env python3
+"""bouch-review — promotion-review surface generator.
+
+Sweeps a home directory for git repositories, collects *derived* evidence per
+repo (git state, tests, tags, README excerpt, file tree, media artifacts, prior
+inventory classification), renders a single-file HTML review artifact, and
+exports a decisions.json the apply step consumes.
+
+Usage:
+    bouch-review generate [--root ~] [--out ~/bouch-review-out]
+    bouch-review apply <decisions.json>   # report only for now
+
+Evidence is derived, never trusted from a repo's own claims. Media is embedded
+as ffmpeg-generated thumbnails; the HTML references full artifacts by
+home-relative path so a `python3 -m http.server --directory <root>` serves them.
+"""
+
+from __future__ import annotations
+
+import base64
+import html as html_mod
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+MEDIA_EXT = {".mp4", ".mov", ".webm", ".mkv", ".png", ".jpg", ".jpeg", ".gif", ".rml"}
+VIDEO_EXT = {".mp4", ".mov", ".webm", ".mkv"}
+
+PRUNE_DIRS = {
+    "node_modules", ".cache", ".npm", ".local", "snap", ".mozilla", ".cargo",
+    ".rustup", ".vscode", ".idea", "Trash", "go", ".conda", ".ollama",
+    "__pycache__", "venv", ".venv", "dist", ".next", ".turbo",
+}
+
+OWNERS = ("paulieb89", "uk-agents", "arti-cat", "Bouch002")
+
+HTML_TEMPLATE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>bouch promotion review</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root { --bg:#0d1117; --fg:#e6edf3; --mut:#8b949e; --acc:#58a6ff; --ok:#3fb950; --warn:#d29922; --bad:#f85149; --card:#161b22; --line:#30363d; }
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace }
+header { position:sticky; top:0; z-index:5; background:var(--card); border-bottom:1px solid var(--line); padding:10px 16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+header .t { font-weight:700; margin-right:8px }
+input,select { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit }
+button { background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 10px; font:inherit; cursor:pointer }
+button:hover { border-color:var(--acc) }
+#count { color:var(--mut); margin-left:auto }
+#exp { border-color:var(--ok); color:var(--ok) }
+table { border-collapse:collapse; width:100% }
+th { text-align:left; color:var(--mut); font-weight:400; padding:6px 8px; border-bottom:1px solid var(--line); cursor:pointer; user-select:none; white-space:nowrap }
+td { padding:6px 8px; border-bottom:1px solid #21262d; vertical-align:top }
+tr.c { cursor:pointer } tr.c:hover td { background:#161b22 }
+.name { color:var(--acc) }
+.mut { color:var(--mut) } .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+.badge { display:inline-block; padding:1px 7px; border-radius:10px; border:1px solid var(--line); font-size:12px }
+.b-promote{border-color:var(--ok);color:var(--ok)} .b-review{border-color:var(--warn);color:var(--warn)}
+.b-vendor{border-color:var(--mut);color:var(--mut)} .b-recorded{border-color:var(--acc);color:var(--acc)}
+.b-empty{border-color:var(--mut);color:var(--mut)} .b-dec{border-color:#bc8cff;color:#bc8cff}
+.detail td { background:#0a0e13; }
+.card { display:grid; grid-template-columns: 320px 1fr; gap:14px; padding:8px 4px }
+@media (max-width:900px){ .card{grid-template-columns:1fr} }
+.card h4 { margin:4px 0; color:var(--mut); font-weight:400; text-transform:uppercase; font-size:11px; letter-spacing:.06em }
+.card pre { margin:0; white-space:pre-wrap; word-break:break-word; max-height:220px; overflow:auto; font-size:12px; color:#c9d1d9 }
+.thumbs { display:flex; gap:8px; flex-wrap:wrap }
+.thumbs a { display:block; border:1px solid var(--line); border-radius:6px; overflow:hidden; width:120px }
+.thumbs img { display:block; width:120px; height:68px; object-fit:cover; background:#000 }
+.thumbs span { display:block; font-size:10px; padding:2px 4px; color:var(--mut); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.verdicts { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px }
+.v-btn { font-size:12px }
+.v-btn.sel { background:var(--acc); color:#000; border-color:var(--acc) }
+.v-btn.sel.retire,.v-btn.sel.skip { background:var(--bad); color:#fff; border-color:var(--bad) }
+.v-btn.sel.defer { background:var(--warn); color:#000; border-color:var(--warn) }
+.v-btn.sel.nw { background:#bc8cff; color:#000; border-color:#bc8cff }
+select.tsel { font-size:12px; padding:2px 6px }
+</style></head><body>
+<header>
+  <span class="t">bouch promotion review</span>
+  <input id="q" placeholder="filter name/path…" size="22">
+  <select id="ffam"><option value="">family: all</option></select>
+  <select id="fprop"><option value="">proposed: all</option></select>
+  <select id="fdec"><option value="">decision: all</option><option>undecided</option><option>promote</option><option>defer</option><option>retire</option><option>needs-work</option></select>
+  <label class="mut"><input type="checkbox" id="fmedia"> has media</label>
+  <button id="exp">export decisions.json</button>
+  <span id="count"></span>
+</header>
+<table><thead><tr>
+  <th data-k="name">name</th><th data-k="family">family</th><th data-k="last">last commit</th>
+  <th data-k="remote">remote</th><th data-k="dirty">dirty</th><th data-k="tests">tests</th>
+  <th data-k="tags">tags</th><th data-k="proposed">proposed</th><th data-k="dec">decision</th>
+</tr></thead><tbody id="tb"></tbody></table>
+<script>
+const CANDS = __CANDIDATES__;
+const HOME = __HOME__;
+let dec = {};
+try { dec = JSON.parse(localStorage.getItem('bouch-review-decisions')||'{}') } catch(e){}
+let sortK='last', sortDir=-1;
+const $=s=>document.querySelector(s);
+function esc(s){ const d=document.createElement('div'); d.textContent=s??''; return d.innerHTML }
+function save(){ localStorage.setItem('bouch-review-decisions', JSON.stringify(dec)) }
+function mediaHtml(c){
+  if(!c.media.length) return '<div class="mut">no media artifacts</div>';
+  return '<div class="thumbs">'+c.media.map(m=>{
+    const src = m.thumb ? 'data:image/jpeg;base64,'+m.thumb : '';
+    const href = '/' + encodeURI(m.rel);
+    return `<a href="${href}" target="_blank" title="${esc(m.rel)} (${(m.size/1024)|0} KB)">${src?`<img src="${src}">`:''}<span>${esc(m.rel.split('/').pop())}</span></a>`
+  }).join('')+'</div>';
+}
+function cardHtml(c,i){
+  const d = dec[i]||{};
+  const types=['agent-plugin','agent-skill','mcp-server','remote-agent','reference-workbench','evidence-repository','observability-tool','routing-pointer'];
+  return `<div class="card"><div>
+    <h4>decision</h4><div class="verdicts">
+      ${['promote','defer','retire','needs-work'].map(v=>`<button class="v-btn ${d.verdict===v?'sel '+({'needs-work':'nw'})[v]||'':(d.verdict===v?'sel':'')}" onclick="setDec(${i},'${v}')">${v}</button>`).join('')}
+      <button class="v-btn ${d.verdict==='skip'?'sel skip':''}" onclick="setDec(${i},'skip')">skip</button>
+    </div>
+    <div style="margin-top:8px"><select class="tsel" onchange="setType(${i},this.value)">
+      <option value="">record type…</option>${types.map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select>
+      <input placeholder="note" size="18" value="${esc(d.note||'')}" onchange="setNote(${i},this.value)"></div>
+    <h4>readme</h4><pre>${esc(c.readme)}</pre>
+    <h4>tree</h4><pre>${esc(c.tree)}</pre>
+    </div><div>
+    <h4>git</h4><pre>${esc(c.git)}</pre>
+    <h4>dirty</h4><pre>${esc(c.dirty_list)}</pre>
+    <h4>media</h4>${mediaHtml(c)}
+    </div></div>`;
+}
+function setDec(i,v){ dec[i]=dec[i]||{}; dec[i].verdict=v; dec[i].id=CANDS[i].name; dec[i].path=CANDS[i].path; save(); render() }
+function setType(i,t){ dec[i]=dec[i]||{}; dec[i].type=t; dec[i].id=CANDS[i].name; dec[i].path=CANDS[i].path; save() }
+function setNote(i,n){ dec[i]=dec[i]||{}; dec[i].note=n; dec[i].id=CANDS[i].name; dec[i].path=CANDS[i].path; save() }
+let openRow=-1;
+function rows(){
+  const q=$('#q').value.toLowerCase(), fam=$('#ffam').value, prop=$('#fprop').value, fd=$('#fdec').value, fm=$('#fmedia').checked;
+  return CANDS.map((c,i)=>({c,i})).filter(({c,i})=>{
+    if(q && !(c.name+' '+c.path).toLowerCase().includes(q)) return false;
+    if(fam && c.family!==fam) return false;
+    if(prop && c.proposed!==prop) return false;
+    if(fm && !c.media.length) return false;
+    const dv=(dec[i]&&dec[i].verdict)||'undecided';
+    if(fd==='undecided' && dv!=='undecided') return false;
+    if(fd && fd!=='undecided' && dv!==fd) return false;
+    return true;
+  }).sort((a,b)=>{ const x=a.c[sortK]??'', y=b.c[sortK]??''; return (x<y?-1:x>y?1:0)*sortDir });
+}
+function render(){
+  const rs=rows();
+  $('#tb').innerHTML = rs.map(({c,i})=>{
+    const d=dec[i]||{};
+    return `<tr class="c" onclick="toggle(${i})">
+      <td class="name">${esc(c.name)}</td><td class="mut">${esc(c.family)}</td>
+      <td>${esc(c.last)}</td><td class="mut">${esc(c.remote||'—')}</td>
+      <td class="${c.dirty?'warn':''}">${c.dirty||''}</td><td>${c.tests?'✓':''}</td>
+      <td>${c.tags||''}</td><td><span class="badge b-${c.proposed}">${esc(c.proposed)}</span></td>
+      <td>${d.verdict?`<span class="badge b-dec">${esc(d.verdict)}${d.type?' · '+esc(d.type):''}</span>`:''}</td></tr>`
+    + (openRow===i?`<tr class="detail"><td colspan="9">${cardHtml(c,i)}</td></tr>`:'');
+  }).join('');
+  const dn=Object.values(dec).filter(d=>d.verdict).length;
+  $('#count').textContent = `${dn}/${CANDS.length} decided · ${rs.length} shown`;
+}
+function toggle(i){ openRow = openRow===i?-1:i; render() }
+document.querySelectorAll('th').forEach(th=>th.onclick=()=>{ const k=th.dataset.k; sortDir = sortK===k?-sortDir:1; sortK=k; render() });
+['q','ffam','fprop','fdec','fmedia'].forEach(id=>$('#'+id).oninput=render);
+$('#exp').onclick=()=>{
+  const out={generated:new Date().toISOString(), home:HOME, decisions:Object.entries(dec).filter(([k,v])=>v.verdict).map(([k,v])=>({...v, index:+k}))};
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:'application/json'}));
+  a.download='decisions.json'; a.click();
+};
+(function init(){
+  [...new Set(CANDS.map(c=>c.family))].sort().forEach(f=>{ const o=document.createElement('option'); o.textContent=f; $('#ffam').append(o) });
+  [...new Set(CANDS.map(c=>c.proposed))].sort().forEach(f=>{ const o=document.createElement('option'); o.textContent=f; $('#fprop').append(o) });
+  render();
+})();
+</script></body></html>
+"""
+
+
+def sh(args, cwd=None, timeout=20):
+    try:
+        return subprocess.run(args, cwd=cwd, timeout=timeout, capture_output=True,
+                              text=True).stdout.strip()
+    except Exception:
+        return ""
+
+
+def sanitize_url(url: str) -> str:
+    """Strip credentials from remote URLs (tokens embedded in https/gitlab URLs)."""
+    return re.sub(r"(https?://)[^/@\s]+@", r"\1", url)
+
+
+def owner_repo(url: str) -> str:
+    m = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", url)
+    return f"{m.group(1)}/{m.group(2)}" if m else ""
+
+
+def find_repos(root: Path) -> list[Path]:
+    out = []
+    for dirpath, dirnames, _files in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in PRUNE_DIRS and not d.endswith(".egg-info")]
+        depth = len(Path(dirpath).relative_to(root).parts)
+        if depth > 5:
+            dirnames[:] = []
+            continue
+        if ".git" in dirnames:
+            out.append(Path(dirpath))
+            dirnames.remove(".git")
+            # keep descending: nested repos under fleet dirs etc.
+    return sorted(out)
+
+
+def readme_excerpt(d: Path, limit=1200) -> str:
+    for name in ("README.md", "README.rst", "README.txt", "README"):
+        p = d / name
+        if p.is_file():
+            try:
+                txt = p.read_text(errors="replace")
+            except Exception:
+                return ""
+            lines = [l for l in txt.splitlines() if l.strip() and not l.strip().startswith(("#", "!", "<!--", "[!", "badges", "---"))]
+            return "\n".join(lines[:12])[:limit]
+    return ""
+
+
+def tree_summary(d: Path, max_entries=30) -> str:
+    try:
+        entries = sorted(d.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+    except Exception:
+        return ""
+    rows = []
+    for e in entries[:max_entries]:
+        if e.name == ".git":
+            continue
+        if e.is_dir():
+            try:
+                n = sum(1 for _ in e.iterdir())
+            except Exception:
+                n = -1
+            rows.append(f"{e.name}/  ({n})")
+        else:
+            rows.append(e.name)
+    if len(entries) > max_entries:
+        rows.append(f"… +{len(entries)-max_entries} more")
+    return "\n".join(rows)
+
+
+def find_media(d: Path, cap=12) -> list[dict]:
+    out = []
+    for dirpath, dirnames, files in os.walk(d):
+        dirnames[:] = [x for x in dirnames if x not in PRUNE_DIRS | {".git"}]
+        rel_depth = len(Path(dirpath).relative_to(d).parts)
+        if rel_depth > 4:
+            dirnames[:] = []
+            continue
+        for f in files:
+            if Path(f).suffix.lower() in MEDIA_EXT:
+                p = Path(dirpath) / f
+                try:
+                    size = p.stat().st_size
+                except OSError:
+                    continue
+                if size < 1024:  # skip icons/dots
+                    continue
+                out.append({"path": p, "rel": "", "size": size,
+                            "kind": "video" if Path(f).suffix.lower() in VIDEO_EXT else "image"})
+                if len(out) >= cap:
+                    return out
+    return out
+
+
+def thumb(media_path: Path, is_video: bool) -> str:
+    """Small jpeg thumbnail as base64, or '' on failure."""
+    if is_video:
+        args = ["ffmpeg", "-v", "error", "-ss", "1", "-i", str(media_path),
+                "-frames:v", "1", "-vf", "scale=320:-2", "-f", "image2", "-"]
+    else:
+        args = ["ffmpeg", "-v", "error", "-i", str(media_path),
+                "-vf", "scale=320:-2", "-frames:v", "1", "-f", "image2", "-"]
+    try:
+        r = subprocess.run(args, capture_output=True, timeout=15)
+        if r.returncode == 0 and r.stdout:
+            return base64.b64encode(r.stdout).decode()
+    except Exception:
+        pass
+    return ""
+
+
+def load_inventory(home: Path) -> dict:
+    """Map repo path -> classification from 00_agents/INVENTORY.md sections."""
+    inv = {}
+    f = home / "00_agents" / "INVENTORY.md"
+    if not f.exists():
+        return inv
+    cur = None
+    for line in f.read_text(errors="replace").splitlines():
+        m = re.match(r"^## (\w+)", line)
+        if m:
+            cur = m.group(1)
+            continue
+        if cur and line.startswith("| ~/"):
+            path = line.split("|")[1].strip()
+            inv[os.path.expanduser(path)] = cur
+    return inv
+
+
+def family_for(path: Path, home: Path) -> str:
+    rel = path.relative_to(home)
+    parts = rel.parts
+    if len(parts) >= 2 and parts[0] == "dev" and parts[1] == "mcpfleet":
+        return "dev/mcpfleet"
+    for pref in ("dev/00_RELEASE", "dev/cloned-dont-edit", "dev/stack", "dev/tools",
+                 "dev/projects", "dev/playground", "dev/estate_agents", "dev/sains",
+                 "company/skills-uk", "company/clients", "company/demos", "company/content",
+                 "company", "experiments", "00_agents", "00-hackathon", "00dev", "00_mcp_bch",
+                 "codex-agent-benchmark", "codex-r1-case-law", "0-co", "bouch-v2", "work",
+                 "workingdir", "bch-mcps", "Documents", "Downloads", "Music", "src",
+                 "knowledge", "workbenches", "eve-experiments", "test", "backup-repos",
+                 "Public", "PACE", "CascadeProjects", "vercel-ship", "uk-agents"):
+        if rel.as_posix().startswith(pref):
+            return pref
+    if len(parts) == 1:
+        return "home-top"
+    return parts[0]
+
+
+def classify(d: Path, remote_owner: str, commits: int, has_tests: bool,
+             files: int, inventory: str, known_records: set) -> str:
+    if d.as_posix() in known_records:
+        return "recorded"
+    if inventory:
+        return {"production": "promote", "framework": "promote",
+                "template": "review", "probe": "review", "empty": "skip"}.get(inventory, "review")
+    if remote_owner and not any(o in remote_owner for o in OWNERS):
+        return "vendor"
+    if commits == 0 or files < 3:
+        return "empty"
+    if remote_owner and any(o in remote_owner for o in OWNERS) and has_tests:
+        return "promote"
+    return "review"
+
+
+def collect(d: Path, home: Path, inventory_map: dict, known_records: set,
+            make_thumbs: bool, thumb_budget: list[int]) -> dict:
+    remote_raw = sanitize_url(sh(["git", "-C", str(d), "remote", "get-url", "origin"]))
+    owner = owner_repo(remote_raw)
+    branch = sh(["git", "-C", str(d), "branch", "--show-current"])
+    last_date = sh(["git", "-C", str(d), "log", "-1", "--format=%cs"])
+    last_subj = sh(["git", "-C", str(d), "log", "-1", "--format=%s"])
+    commits = int(sh(["git", "-C", str(d), "rev-list", "--count", "HEAD"]) or 0)
+    tags = sh(["git", "-C", str(d), "tag"]).split("\n")
+    tags = [t for t in tags if t]
+    latest_tag = sh(["git", "-C", str(d), "tag", "--sort=-creatordate"]).split("\n")[0]
+    porcelain = sh(["git", "-C", str(d), "status", "--porcelain"]).split("\n")
+    porcelain = [l for l in porcelain if l]
+    unpushed = sh(["git", "-C", str(d), "log", "@{u}..HEAD", "--oneline"]).split("\n")
+    unpushed = [l for l in unpushed if l] if unpushed != [""] else []
+    files = sum(1 for _ in d.iterdir()) - (1 if (d / ".git").exists() else 0)
+    has_tests = bool(sh(["bash", "-c",
+                         f"find {d} -maxdepth 4 \\( -name 'test_*.py' -o -name '*_test.py' -o -name 'tests' -type d -o -name 'evals' -type d \\) "
+                         "-not -path '*/node_modules/*' -not -path '*/.git/*' | head -1"]))
+    readme = readme_excerpt(d)
+    media = find_media(d)
+    inv = inventory_map.get(str(d), "")
+    for m in media:
+        m["rel"] = str(m["path"].relative_to(home))
+        del m["path"]
+        m["thumb"] = ""
+    if make_thumbs and thumb_budget[0] > 0:
+        for m in media[:4]:
+            if thumb_budget[0] <= 0:
+                break
+            t = thumb(home / m["rel"], m["kind"] == "video")
+            if t:
+                m["thumb"] = t
+                thumb_budget[0] -= 1
+    proposed = classify(d, owner, commits, has_tests, files, inv, known_records)
+    git_block = (f"remote: {remote_raw or 'none'}\nbranch: {branch or '(detached)'}\n"
+                 f"commits: {commits} | unpushed: {len(unpushed)} | tags: {len(tags)}"
+                 f"{(' (latest ' + latest_tag + ')') if latest_tag else ''}\n"
+                 f"last: {last_date} {last_subj}\n"
+                 f"tests: {'yes' if has_tests else 'no'} | files: {files}\n"
+                 f"inventory: {inv or '—'}")
+    rel = str(d.relative_to(home))
+    return {
+        "name": d.name, "path": rel, "family": family_for(d, home),
+        "remote": owner or ("none" if not remote_raw else remote_raw),
+        "last": last_date or "—", "dirty": len(porcelain), "tests": has_tests,
+        "tags": len(tags), "proposed": proposed,
+        "readme": readme or "(no README)", "tree": tree_summary(d),
+        "git": git_block, "dirty_list": "\n".join(porcelain[:12]) or "(clean)",
+        "media": media,
+    }
+
+
+def generate(root: Path, out_dir: Path, make_thumbs: bool) -> None:
+    home = root.expanduser().resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    inventory_map = load_inventory(home)
+
+    known_records = set()
+    reg = home / "src" / "bouch-registry" / "registry" / "entries"
+    if reg.exists():
+        for e in reg.glob("*.json"):
+            try:
+                src = json.loads(e.read_text()).get("source", {}).get("repository", "")
+                if src:
+                    known_records.add(src)
+            except Exception:
+                pass
+
+    print(f"scanning {home} …")
+    repos = find_repos(home)
+    print(f"{len(repos)} repositories found")
+
+    candidates, thumb_budget = [], [400]
+    for i, d in enumerate(repos):
+        if i % 25 == 0:
+            print(f"  {i}/{len(repos)} …")
+        try:
+            candidates.append(collect(d, home, inventory_map, known_records,
+                                      make_thumbs, thumb_budget))
+        except Exception as e:
+            candidates.append({"name": d.name, "path": str(d.relative_to(home)),
+                               "family": family_for(d, home), "remote": "", "last": "—",
+                               "dirty": 0, "tests": False, "tags": 0, "proposed": "review",
+                               "readme": f"(collect error: {e})", "tree": "", "git": "",
+                               "dirty_list": "", "media": []})
+
+    (out_dir / "candidates.json").write_text(json.dumps(
+        {"generated": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "home": str(home),
+         "count": len(candidates), "candidates": candidates}, indent=1))
+
+    # Escape "<" so embedded content (READMEs, HTML snippets) can't break the
+    # script tag — a literal "</script>" inside the JSON would terminate it.
+    embedded = json.dumps(candidates).replace("<", "\\u003c")
+    page = (HTML_TEMPLATE
+            .replace("__CANDIDATES__", embedded)
+            .replace("__HOME__", json.dumps(str(home))))
+    (out_dir / "review.html").write_text(page)
+    print(f"\nwrote {out_dir/'candidates.json'} ({len(candidates)} repos)")
+    print(f"wrote {out_dir/'review.html'} ({len(page)//1024} KB)")
+    print(f"\nserve media + artifact with:")
+    print(f"  python3 -m http.server 8777 --directory {home} &")
+    print(f"then open http://<host>:8777/{out_dir.relative_to(home) if out_dir.is_relative_to(home) else out_dir}/review.html")
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if not args or args[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    cmd = args[0]
+    if cmd == "generate":
+        root, out = Path.home(), None
+        thumbs = "--no-thumbs" not in args
+        for i, a in enumerate(args):
+            if a == "--root":
+                root = Path(args[i + 1])
+            elif a == "--out":
+                out = Path(args[i + 1])
+        if out is None:
+            out = root / "bouch-review-out"
+        generate(root, out, thumbs)
+        return 0
+    if cmd == "apply" and len(args) > 1:
+        data = json.loads(Path(args[1]).read_text())
+        decs = data.get("decisions", [])
+        from collections import Counter
+        print(f"{len(decs)} decisions: {dict(Counter(d['verdict'] for d in decs))}")
+        for d in decs:
+            print(f"  {d['verdict']:>10} {d['path']}"
+                  + (f" -> {d['type']}" if d.get("type") else "")
+                  + (f"  # {d['note']}" if d.get("note") else ""))
+        return 0
+    print(__doc__)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
