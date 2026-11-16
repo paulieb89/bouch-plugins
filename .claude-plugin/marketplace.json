@@ -90,6 +90,22 @@
       "category": "skills"
     },
     {
+      "name": "bouch-web",
+      "source": {
+        "source": "github",
+        "repo": "paulieb89/bouch-web",
+        "ref": "v0.1.0",
+        "sha": "fe717d44c0a3536ef5d45f7365d89634043033a4"
+      },
+      "description": "Evidence-tiered web design knowledge: visual direction, typography, component and interaction-state coverage, reference-site research, and rendered browser verification with the Bouch Web Workbench. Canonical source: paulieb89/bouch-web.",
+      "author": {
+        "name": "Paul Boucherat",
+        "email": "paul@bouch.dev"
+      },
+      "repository": "https://github.com/paulieb89/bouch-web",
+      "category": "skills"
+    },
+    {
       "name": "bouch-game-assets",
       "source": "./plugins/bouch-game-assets",
       "description": "Evidence-led game and 3D asset production: source, import, runtime, real interaction, integrity, bounded candidate lineage, and human visual review. Engine-agnostic; projects own their adapters.",

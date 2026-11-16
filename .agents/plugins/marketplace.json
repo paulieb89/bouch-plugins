@@ -113,6 +113,19 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Developer tools"
+    },
+    {
+      "name": "bouch-web",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/paulieb89/bouch-web.git",
+        "sha": "fe717d44c0a3536ef5d45f7365d89634043033a4"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer tools"
     }
   ]
 }
