@@ -94,8 +94,8 @@
       "source": {
         "source": "github",
         "repo": "paulieb89/bouch-web",
-        "ref": "v0.1.0",
-        "sha": "fe717d44c0a3536ef5d45f7365d89634043033a4"
+        "ref": "v0.2.0",
+        "sha": "9632f4426a6325071a8ef0b6f1b9a47b03422f57"
       },
       "description": "Evidence-tiered web design knowledge: visual direction, typography, component and interaction-state coverage, reference-site research, and rendered browser verification with the Bouch Web Workbench. Canonical source: paulieb89/bouch-web.",
       "author": {

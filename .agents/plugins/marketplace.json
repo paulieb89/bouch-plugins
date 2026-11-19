@@ -119,7 +119,8 @@
       "source": {
         "source": "url",
         "url": "https://github.com/paulieb89/bouch-web.git",
-        "sha": "fe717d44c0a3536ef5d45f7365d89634043033a4"
+        "sha": "9632f4426a6325071a8ef0b6f1b9a47b03422f57",
+        "ref": "v0.2.0"
       },
       "policy": {
         "installation": "AVAILABLE",
