@@ -28,8 +28,8 @@ claude plugin install bouch-agent-core@bouch-plugins --scope user
 claude plugin install bouch-game-assets@bouch-plugins --scope user
 ```
 
-`bouch-agent-core` supplies the Registry MCP connection. Registry discovery is
-read-only; it does not install project adapters or carry live project state.
+`bouch-agent-core` supplies project routing and the evidence and handoff
+Skills. It does not install project adapters or carry live project state.
 
 ## Validate
 

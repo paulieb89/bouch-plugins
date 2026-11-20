@@ -68,10 +68,9 @@ Never edit external plugin content here.
 
    Pin the **peeled** commit (the `vX.Y.Z^{}` line), not the tag object.
 3. Update both catalogues as appropriate: Claude `ref` + `sha`; OpenAI `sha`.
-4. If a Bouch Registry record also points at this release, change and deploy it
-   in the Registry's repository, then read an entrypoint back from the live
-   service and check the commit it reports. Not every plugin has a record; follow
-   that repository's own release convention.
+4. If a Bouch catalogue record also points at this release, update its `ref`
+   and entrypoints in the `bouch-registry` repository and run its
+   `verify-sources` against the release checkout. Not every plugin has a record.
 5. Validate, test in isolation, and update README pins.
 
 ## Validate
@@ -148,7 +147,7 @@ None is compulsory. `claude plugin validate`, `codex plugin ...` and Anthropic's
 [plugin-dev](https://github.com/anthropics/claude-code/tree/main/plugins/plugin-dev)
 (`plugin-validator`, `skill-reviewer`) help when they fit. `doctor/bouch-doctor`
 is an optional read-only host check (see the README), not a release gate.
-`doctor/bouch-act` is its sibling act layer: resolves a Registry record to
+`doctor/bouch-act` is its sibling act layer: resolves a catalogue record to
 per-harness install steps and applies them with consent — same checkout map,
 same optional status.
 

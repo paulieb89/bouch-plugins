@@ -2,18 +2,19 @@
 """Resolve a Bouch capability to a concrete install plan and apply it.
 
 The act layer next to bouch-doctor: doctor checks what a host already has;
-bouch-act performs the record-to-installed hop. The remote Registry stays a
-read-only pointer service — this tool consumes pointers, it never writes
-them.
+bouch-act performs the record-to-installed hop. The Bouch catalogue
+(bouch-registry) only holds pointers — this tool consumes them, it never
+writes them.
 
   - `plan` resolves a record id or free-text query against the deployed
-    Registry (and the local bouch-registry checkout when one is mapped) and
+    Bouch catalogue (bouch-registry `main` on GitHub, plus a mapped local
+    checkout for records not merged yet) and
     prints the exact commands and file writes for each detected harness.
   - `apply` re-displays the plan, asks for confirmation, backs up any file it
     edits, then runs the steps. `--yes` skips the prompt for dev.bouch
     records only; external (public-registry / GitHub) hits always require an
     interactive confirmation because they are not estate-vetted.
-  - `status` shows which Registry capabilities are installed where.
+  - `status` shows which catalogued capabilities are installed where.
 
 Local checkouts come from the same map bouch-doctor uses:
 
@@ -27,18 +28,21 @@ plan names the ~/.env slot to fill instead.
 
 import argparse
 import getpass
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
-REGISTRY_JSON_URL = "https://registry.bouch.dev/registry.json"
+CATALOGUE_REPO = "paulieb89/bouch-registry"
+CATALOGUE_TARBALL = f"https://codeload.github.com/{CATALOGUE_REPO}/tar.gz/refs/heads/main"
 MARKETPLACE_REPO = "paulieb89/bouch-plugins"
 MARKETPLACE = "bouch-plugins"
 MCP_REGISTRY_URL = "https://registry.modelcontextprotocol.io/v0/servers"
@@ -97,6 +101,20 @@ def fetch_json(url, timeout=60):
         return json.loads(resp.read().decode())
 
 
+def fetch_catalogue(timeout=60):
+    """Records from bouch-registry `main` on GitHub, read in memory from its tarball."""
+    req = urllib.request.Request(CATALOGUE_TARBALL, headers={"user-agent": "bouch-act/1"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        blob = resp.read()
+    records = []
+    with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
+        for m in tar.getmembers():
+            rel = m.name.split("/", 1)[-1]
+            if m.isfile() and rel.startswith("registry/entries/") and rel.endswith(".json"):
+                records.append(json.load(tar.extractfile(m)))
+    return {"capabilities": records}
+
+
 def norm(s):
     return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
 
@@ -122,23 +140,23 @@ def checkout_root(ctx):
 
 
 def load_records(ctx):
-    """Deployed records plus not-yet-deployed entries from a local checkout.
+    """Records on bouch-registry `main`, plus unmerged entries from a local checkout.
 
-    Returns {id: record}; each record gains `_deployed` (present on the live
-    service) so plans can flag records that only exist in the repo so far.
+    Returns {id: record}; each record gains `_deployed` (present on `main`)
+    so plans can flag records that only exist in a local checkout so far.
     """
     records = {}
-    cache = CACHE / "registry.json"
+    cache = CACHE / "catalogue.json"
     data = None
     try:
-        data = fetch_json(REGISTRY_JSON_URL, timeout=45)
+        data = fetch_catalogue(timeout=45)
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_text(json.dumps(data))
     except Exception as e:  # noqa: BLE001
-        ctx.setdefault("notes", []).append(f"deployed Registry unreachable ({e})")
+        ctx.setdefault("notes", []).append(f"catalogue on GitHub unreachable ({e})")
         if cache.is_file() and time.time() - cache.stat().st_mtime < CACHE_TTL * 24:
             data = load_json(cache)
-            ctx.setdefault("notes", []).append("using cached registry.json")
+            ctx.setdefault("notes", []).append("using cached catalogue")
     if data:
         for c in data.get("capabilities", []):
             c["_deployed"] = True
@@ -429,8 +447,8 @@ def print_plan(rec, steps, tier):
     print(f"  source: {src['repository']}  "
           f"{src.get('url') or '(no published remote)'}  ref: {src.get('ref') or '-'}")
     if not rec.get("_deployed", True):
-        print("  ! record exists in local checkout only — not yet deployed "
-              "to registry.bouch.dev")
+        print("  ! record exists in local checkout only — not yet merged "
+              "to bouch-registry main")
     print(f"  trust tier: {tier}")
     print(f"  summary: {rec.get('summary', '')[:200]}")
     for i, s in enumerate(steps, 1):
@@ -556,7 +574,7 @@ def status(ctx, market):
         else:
             co = ctx["checkouts"].get(rec["source"]["repository"])
             state.append("checkout:" + (str(co) if co and Path(co).is_dir() else "none"))
-        dep = "" if rec.get("_deployed", True) else " (not deployed)"
+        dep = "" if rec.get("_deployed", True) else " (not merged)"
         print(f"  {cid}{dep}: {'  '.join(state) or 'pointer only'}")
 
 

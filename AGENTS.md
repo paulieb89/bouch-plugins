@@ -20,7 +20,8 @@ and what has been verified for Codex.
   there is no mandatory approval or review gate for ordinary changes.
 - Inspect `git status` and the current files first. Preserve existing user work
   and unrelated changes.
-- The BOUCH Registry is optional discovery, not a prerequisite. There is no
+- The Bouch catalogue (`bouch-registry` repo) is optional discovery, not a
+  prerequisite. The hosted Registry MCP service is retired. There is no
   Runner dependency.
 - Treat each plugin's manifests as one set: keep `name` and `version` aligned
   across them. Descriptions and interface metadata may differ by host. Where a
@@ -30,5 +31,5 @@ and what has been verified for Codex.
 - Follow the user's existing authorisation and project policy for git and
   release actions; account for the distinct effects of each action.
 - Distinguish what you verified (command output, a fresh install) from what you
-  inferred. Do not claim a Work sync, Registry deployment or skill activation
+  inferred. Do not claim a Work sync or skill activation
   from local tests.
