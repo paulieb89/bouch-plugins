@@ -117,7 +117,13 @@ def github_url(repo):
 
 
 def ls_remote(url, ref):
-    """Commit a ref resolves to on a remote (annotated tags peeled), or None."""
+    """Commit a ref resolves to on a remote (annotated tags peeled), or None.
+
+    A ref that is a full commit SHA is not a name `git ls-remote` can list, so
+    it is looked up as a commit on GitHub instead (see commit_exists).
+    """
+    if re.fullmatch(r"[0-9a-f]{40}", ref or ""):
+        return commit_exists(url, ref)
     rc, out, _ = run(["git", "ls-remote", url, ref, f"refs/tags/{ref}^{{}}"], timeout=60)
     if rc != 0:
         return None
@@ -126,6 +132,30 @@ def ls_remote(url, ref):
         if name in rows:
             return rows[name]
     return None
+
+
+def commit_exists(url, sha):
+    """The SHA if that commit exists on a GitHub source, else None.
+
+    Anonymous REST first; for private repositories, an authenticated `gh api`
+    call when gh is available.
+    """
+    repo = github_repo(url)
+    if not repo:
+        return None
+    req = urllib.request.Request(f"https://api.github.com/repos/{repo}/commits/{sha}",
+                                 headers={"user-agent": "bouch-doctor/1",
+                                          "accept": "application/vnd.github.sha"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return sha if resp.read().decode().strip() == sha else None
+    except urllib.error.HTTPError as e:
+        if e.code not in (403, 404) or not shutil.which("gh"):
+            return None
+    except OSError:
+        return None
+    rc, out, _ = run(["gh", "api", f"repos/{repo}/commits/{sha}", "--jq", ".sha"], timeout=60)
+    return sha if rc == 0 and out.strip() == sha else None
 
 
 def load_json(path, default=None):
@@ -282,7 +312,7 @@ def check_host(r, ctx):
 
     claude_md = CLAUDE_DIR / "CLAUDE.md"
     text = claude_md.read_text() if claude_md.exists() else ""
-    if RETIRED_HOST in text or "bouch registry" in text.lower():
+    if RETIRED_HOST in text or re.search(r"\b(search_capabilities|get_capability|read_capability_entrypoint)\b", text):
         r.warn("~/.claude/CLAUDE.md still routes through the Bouch Registry; point it at the "
                f"{MARKETPLACE} marketplace and the {CATALOGUE} catalogue instead")
 
