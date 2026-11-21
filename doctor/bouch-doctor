@@ -3,25 +3,25 @@
 
 The architecture, not a snapshot of it:
 
-  - bouch-agent-core (installed from the bouch-plugins marketplace) and the
-    Bouch Registry MCP server are the only Bouch capabilities that are
-    user-wide, together with a generic Registry routing rule in the user
-    CLAUDE.md.
-  - Domain knowledge is reached on demand through the Registry, not by
-    installing domain plugins user-wide.
+  - bouch-agent-core (installed from the bouch-plugins marketplace) is the
+    only Bouch capability that is user-wide.
+  - Domain plugins install per project from the marketplace, not user-wide.
   - Workbench and adapter capabilities stay inside their projects.
+  - The hosted Registry MCP service is retired: no host should still be
+    configured to connect to it. Capability records are read from the
+    bouch-registry repository on GitHub.
 
 Expected names, versions, commits and capability sets come from the
-marketplace, the Registry and Claude Code itself. The only local input is
-where repositories are checked out, because the Registry deliberately stores
-no machine paths:
+marketplace, the catalogue and Claude Code itself. The only local input is
+where repositories are checked out, because records deliberately store no
+machine paths:
 
     ~/.config/bouch/doctor.json   {"checkouts": {"<repository>": "<path>", ...}}
     --checkout <repository>=<path>   (repeatable; overrides the file)
 
-Default mode checks local state and the live Registry and takes seconds.
---full also reads every declared Registry entrypoint, runs the registry's own
-`verify-sources --remote` when its checkout is known, and starts fresh
+Default mode checks local state and the published catalogue and takes
+seconds. --full also reads every declared entrypoint, runs the catalogue's own
+`validate` and `verify-sources` when its checkout is known, and starts fresh
 headless Claude sessions in a neutral directory and in each workbench to
 compare their capability surfaces. --full uses API credit.
 
@@ -30,21 +30,26 @@ any check fails.
 """
 
 import argparse
+import io
 import json
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import tomllib
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 HOST_PLUGIN = "bouch-agent-core"
 MARKETPLACE = "bouch-plugins"
-REGISTRY_SERVER = "bouch-registry"
-REGISTRY_URL = "https://registry.bouch.dev/mcp"
-ROUTING_MARKER = "bouch registry"
+CATALOGUE = "bouch-registry"
+CATALOGUE_REPO = "paulieb89/bouch-registry"
+CATALOGUE_TARBALL = f"https://codeload.github.com/{CATALOGUE_REPO}/tar.gz/refs/heads/main"
+RETIRED_SERVER = "bouch-registry"
+RETIRED_HOST = "registry.bouch.dev"
 
 HOME = Path.home()
 CLAUDE_DIR = HOME / ".claude"
@@ -112,7 +117,13 @@ def github_url(repo):
 
 
 def ls_remote(url, ref):
-    """Commit a ref resolves to on a remote (annotated tags peeled), or None."""
+    """Commit a ref resolves to on a remote (annotated tags peeled), or None.
+
+    A ref that is a full commit SHA is not a name `git ls-remote` can list, so
+    it is looked up as a commit on GitHub instead (see commit_exists).
+    """
+    if re.fullmatch(r"[0-9a-f]{40}", ref or ""):
+        return commit_exists(url, ref)
     rc, out, _ = run(["git", "ls-remote", url, ref, f"refs/tags/{ref}^{{}}"], timeout=60)
     if rc != 0:
         return None
@@ -123,6 +134,30 @@ def ls_remote(url, ref):
     return None
 
 
+def commit_exists(url, sha):
+    """The SHA if that commit exists on a GitHub source, else None.
+
+    Anonymous REST first; for private repositories, an authenticated `gh api`
+    call when gh is available.
+    """
+    repo = github_repo(url)
+    if not repo:
+        return None
+    req = urllib.request.Request(f"https://api.github.com/repos/{repo}/commits/{sha}",
+                                 headers={"user-agent": "bouch-doctor/1",
+                                          "accept": "application/vnd.github.sha"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return sha if resp.read().decode().strip() == sha else None
+    except urllib.error.HTTPError as e:
+        if e.code not in (403, 404) or not shutil.which("gh"):
+            return None
+    except OSError:
+        return None
+    rc, out, _ = run(["gh", "api", f"repos/{repo}/commits/{sha}", "--jq", ".sha"], timeout=60)
+    return sha if rc == 0 and out.strip() == sha else None
+
+
 def load_json(path, default=None):
     try:
         return json.loads(Path(path).read_text())
@@ -130,49 +165,51 @@ def load_json(path, default=None):
         return default
 
 
-class Registry:
-    """Minimal MCP client for the Registry's stateless streamable-HTTP endpoint."""
+def fetch_catalogue():
+    """(records by id, domains) from bouch-registry `main`, read in memory from its tarball."""
+    req = urllib.request.Request(CATALOGUE_TARBALL, headers={"user-agent": "bouch-doctor/1"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        blob = resp.read()
+    records, domains = {}, []
+    with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tar:
+        for m in tar.getmembers():
+            rel = m.name.split("/", 1)[-1]
+            if not m.isfile():
+                continue
+            if rel == "registry/domains.json":
+                domains = json.load(tar.extractfile(m))
+            elif rel.startswith("registry/entries/") and rel.endswith(".json"):
+                rec = json.load(tar.extractfile(m))
+                records[rec["id"]] = rec
+    return records, domains
 
-    def __init__(self, url):
-        self.url = url
-        self.server_info = None
-        self._id = 0
 
-    def rpc(self, method, params=None):
-        self._id += 1
-        body = json.dumps({"jsonrpc": "2.0", "id": self._id, "method": method,
-                           "params": params or {}}).encode()
-        req = urllib.request.Request(self.url, data=body, headers={
-            "content-type": "application/json",
-            "accept": "application/json, text/event-stream",
-        })
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            text = resp.read().decode()
-        if text.lstrip().startswith("{"):
-            msg = json.loads(text)
-        else:
-            data = [line[5:].strip() for line in text.splitlines() if line.startswith("data:")]
-            msg = json.loads(data[-1])
-        if "error" in msg:
-            raise RuntimeError(msg["error"].get("message", msg["error"]))
-        return msg["result"]
+def github_repo(url):
+    m = re.match(r"https://github\.com/([^/]+/[^/]+?)(?:\.git)?/?$", url or "")
+    return m.group(1) if m else None
 
-    def initialize(self):
-        result = self.rpc("initialize", {
-            "protocolVersion": "2025-06-18", "capabilities": {},
-            "clientInfo": {"name": "bouch-doctor", "version": "1"},
-        })
-        self.server_info = result.get("serverInfo", {})
-        return result
 
-    def tool(self, name, **arguments):
-        result = self.rpc("tools/call", {"name": name, "arguments": arguments})
-        if result.get("isError"):
-            text = " ".join(c.get("text", "") for c in result.get("content", []))
-            raise RuntimeError(text.strip() or f"{name} failed")
-        if "structuredContent" in result:
-            return result["structuredContent"]
-        return json.loads(result["content"][0]["text"])
+def read_raw(url, ref, path):
+    """Confirm a file exists at ref on a GitHub source.
+
+    Anonymous raw.githubusercontent.com first; for private repositories fall
+    back to an authenticated `gh api` call when gh is available.
+    """
+    repo = github_repo(url)
+    if not repo:
+        raise RuntimeError(f"not a GitHub source: {url}")
+    req = urllib.request.Request(
+        f"https://raw.githubusercontent.com/{repo}/{ref}/{path}",
+        method="HEAD", headers={"user-agent": "bouch-doctor/1"})
+    try:
+        with urllib.request.urlopen(req, timeout=60):
+            return
+    except urllib.error.HTTPError as e:
+        if e.code != 404 or not shutil.which("gh"):
+            raise
+    rc, _, err = run(["gh", "api", f"repos/{repo}/contents/{path}?ref={ref}", "--silent"], timeout=60)
+    if rc != 0:
+        raise RuntimeError(f"not found anonymously or via gh ({err.strip()[:80]})")
 
 
 def workbench_surface(path):
@@ -257,99 +294,36 @@ def check_host(r, ctx):
         r.ok(f"Core installed correctly: {host_id} {host.get('version')}, user scope, "
              f"enabled{', at the marketplace pin ' + pin[:12] if pin else ''}")
 
-    # Registry: configured at user scope, connected, and actually the Registry.
-    #
-    # Two valid wirings, both user-wide in effect:
-    #   - Plugin-provided: bouch-agent-core's own .claude-plugin/plugin.json
-    #     declares the server. Claude Code then names it
-    #     "plugin:<HOST_PLUGIN>:<REGISTRY_SERVER>" (never the bare
-    #     REGISTRY_SERVER name), and its "scope" label describes how the
-    #     *plugin* was loaded (e.g. a real marketplace user-scope install),
-    #     not a standalone server scope — so user-wideness is derived from
-    #     the plugin's own install check above (`host`), not from text in
-    #     `claude mcp get`'s output.
-    #   - Standalone: someone ran `claude mcp add --scope user bouch-registry
-    #     <url>` by hand, kept for back-compat. Here Claude Code does use the
-    #     bare name and does print "User config" for user scope.
-    plugin_server_name = f"plugin:{HOST_PLUGIN}:{REGISTRY_SERVER}"
+    # Retired Registry: nothing should still try to connect to it. A
+    # plugin-provided entry means an older Core (<= 0.4.x) is installed; a
+    # bare entry was added by hand with `claude mcp add`.
+    plugin_server_name = f"plugin:{HOST_PLUGIN}:{RETIRED_SERVER}"
     with tempfile.TemporaryDirectory(prefix="bouch-doctor-") as neutral:
-        bare_rc, bare_out = mcp_get(REGISTRY_SERVER, neutral)
-        plugin_rc, plugin_out = mcp_get(plugin_server_name, neutral)
-    reg = ctx["registry"]
-    try:
-        reg.initialize()
-    except Exception as e:  # noqa: BLE001 - reported, not raised
-        reg.server_info = None
-        ctx["registry_error"] = str(e)
-    problems = []
+        bare_rc, _ = mcp_get(RETIRED_SERVER, neutral)
+        plugin_rc, _ = mcp_get(plugin_server_name, neutral)
     if plugin_rc == 0:
-        # Plugin-provided. Claude Code found a server by this name, so it's
-        # declared; user-wideness is the plugin's own install scope, already
-        # established above, not text in `claude mcp get`'s "Scope" line
-        # (which describes how the *plugin* loaded, e.g. "Dynamic config
-        # (from command line)" under --plugin-dir, not a server scope).
-        reg_out, wiring = plugin_out, f"plugin-provided by {HOST_PLUGIN}"
-        if not host:
-            problems.append(f"provided by {HOST_PLUGIN}, which is not installed at user scope")
-    elif bare_rc == 0:
-        # Standalone, manually configured: back-compat with `claude mcp add
-        # --scope user bouch-registry <url>`. Here Claude Code does use the
-        # bare name and does print "User config" for user scope.
-        reg_out, wiring = bare_out, "standalone (claude mcp add)"
-        if "User config" not in reg_out:
-            problems.append("not configured at user scope")
-    else:
-        reg_out, wiring = "", None
-        problems.append(f"not configured (as either {REGISTRY_SERVER!r} or {plugin_server_name!r})")
-    if reg_out:
-        if "Connected" not in reg_out:
-            problems.append("not connected")
-        if REGISTRY_URL not in reg_out:
-            problems.append(f"URL is not {REGISTRY_URL}")
-    if not reg.server_info or reg.server_info.get("name") != REGISTRY_SERVER:
-        problems.append(f"endpoint did not identify as {REGISTRY_SERVER} "
-                        f"({ctx.get('registry_error', reg.server_info)})")
-    if problems:
-        r.fail(f"Registry: {'; '.join(problems)}")
-    else:
-        r.ok(f"Registry configured and healthy: user-wide ({wiring}), {REGISTRY_URL}, "
-             f"{reg.server_info.get('name')} {reg.server_info.get('version', '')}".rstrip())
+        r.warn(f"{HOST_PLUGIN} still declares the retired {RETIRED_SERVER} MCP server; "
+               "update Core from the marketplace")
+    if bare_rc == 0:
+        r.warn(f"retired {RETIRED_SERVER} MCP server is still configured; "
+               f"remove it with: claude mcp remove {RETIRED_SERVER} -s user")
+    if plugin_rc != 0 and bare_rc != 0:
+        r.ok(f"no connection to the retired {RETIRED_SERVER} MCP server")
 
-    # Generic routing contract in the user CLAUDE.md. Optional once the
-    # Registry itself is healthy: a connected MCP server's own instructions
-    # load into every session automatically (session-start context, independent
-    # of CLAUDE.md), regardless of which wiring above supplied the connection
-    # — so a healthy Registry already gives an agent the same routing guidance
-    # this file would. `problems` is the registry check's own verdict, so this
-    # stays a hard failure when the Registry isn't configured or healthy,
-    # since then neither mechanism is present.
     claude_md = CLAUDE_DIR / "CLAUDE.md"
     text = claude_md.read_text() if claude_md.exists() else ""
-    if ROUTING_MARKER in text.lower():
-        r.ok("generic Registry routing contract present in ~/.claude/CLAUDE.md")
-    elif not problems:
-        r.warn("no ~/.claude/CLAUDE.md routing rule, but the Registry is healthy "
-               "and its own MCP instructions already supply the same routing guidance")
-    else:
-        r.fail("~/.claude/CLAUDE.md has no Bouch Registry routing rule, and the "
-               "Registry itself is not healthy either")
+    if RETIRED_HOST in text or re.search(r"\b(search_capabilities|get_capability|read_capability_entrypoint)\b", text):
+        r.warn("~/.claude/CLAUDE.md still routes through the Bouch Registry; point it at the "
+               f"{MARKETPLACE} marketplace and the {CATALOGUE} catalogue instead")
 
 
 def load_records(r, ctx):
-    """Every record the live Registry lists, keyed by id."""
-    reg = ctx["registry"]
-    records, domains = {}, []
-    if not reg.server_info:
-        return records, domains
+    """Every catalogue record on bouch-registry `main`, keyed by id."""
     try:
-        domains = reg.tool("list_domains")["domains"]
-        for d in domains:
-            for cid in d.get("capability_ids", []):
-                if cid not in records:
-                    records[cid] = reg.tool("get_capability", id=cid)
+        return fetch_catalogue()
     except Exception as e:  # noqa: BLE001
         ctx["records_error"] = str(e)
-    return records, domains
+        return {}, []
 
 
 def check_shadows(r, ctx):
@@ -402,24 +376,23 @@ def check_shadows(r, ctx):
 
 
 def check_remote(r, ctx, full):
-    r.section("REMOTE KNOWLEDGE")
-    reg, records, domains = ctx["registry"], ctx["records"], ctx["domains"]
-    if not reg.server_info:
-        r.fail("Registry unreachable; remote knowledge not checked")
-        return
+    r.section("CATALOGUE")
+    records, domains = ctx["records"], ctx["domains"]
     if ctx.get("records_error") or not records:
-        r.fail(f"Registry records did not resolve: {ctx.get('records_error', 'none listed')}")
+        r.fail(f"catalogue records did not load from {CATALOGUE_REPO}: "
+               f"{ctx.get('records_error', 'none listed')}")
         return
 
-    inconsistent = [
-        f"{cid} in {d['id']}" for d in domains for cid in d.get("capability_ids", [])
-        if records[cid].get("id") != cid or d["id"] not in records[cid].get("domains", [])
-    ]
-    if inconsistent:
-        r.fail(f"Registry records disagree with their domains: {', '.join(inconsistent)}")
+    declared = {d["id"] for d in domains}
+    used = {d for rec in records.values() for d in rec.get("domains", [])}
+    problems = [f"{cid} uses undeclared domain {d}" for cid, rec in records.items()
+                for d in rec.get("domains", []) if d not in declared]
+    problems += [f"domain {d} has no records" for d in sorted(declared - used)]
+    if problems:
+        r.fail(f"catalogue records disagree with their domains: {', '.join(problems)}")
     else:
-        r.ok(f"Registry records resolve: {len(records)} records in {len(domains)} domains, "
-             "each consistent with the domains that list it")
+        r.ok(f"catalogue loads: {len(records)} records in {len(domains)} domains, "
+             "each consistent with the declared domains")
 
     # Durable refs: record refs and marketplace pins must resolve on their remotes.
     resolved, bad = {}, []
@@ -443,7 +416,7 @@ def check_remote(r, ctx, full):
         for b in bad:
             r.fail(f"durable ref: {b}")
     else:
-        r.ok(f"durable refs resolve: {len(resolved)} Registry refs and the "
+        r.ok(f"durable refs resolve: {len(resolved)} catalogue refs and the "
              f"{MARKETPLACE} pins match their remotes")
     for cid, rec in sorted(records.items()):
         if rec["source"].get("url") and not rec["source"].get("ref"):
@@ -459,11 +432,8 @@ def check_remote(r, ctx, full):
         for ep in (eps if full else eps[:1]):
             reads += 1
             try:
-                doc = reg.tool("read_capability_entrypoint", capability_id=cid, entrypoint=ep["path"])
-                expect = resolved.get(cid)
-                if expect and doc.get("commit") != expect:
-                    unreadable.append(f"{cid}:{ep['path']} served from {doc.get('commit', '?')[:12]}, "
-                                      f"ref resolves to {expect[:12]}")
+                ref = resolved.get(cid) or rec["source"].get("ref") or "HEAD"
+                read_raw(rec["source"]["url"], ref, ep["path"])
             except Exception as e:  # noqa: BLE001
                 unreadable.append(f"{cid}:{ep['path']} ({str(e)[:120]})")
     scope = "every declared entrypoint" if full else "first declared entrypoint of each record"
@@ -475,13 +445,14 @@ def check_remote(r, ctx, full):
              f"published records, {reads} reads)")
 
     if full:
-        checkout = ctx["checkouts"].get(REGISTRY_SERVER)
+        checkout = ctx["checkouts"].get(CATALOGUE)
         if not checkout:
-            r.warn(f"no {REGISTRY_SERVER} checkout mapped; verify-sources --remote not run")
+            r.warn(f"no {CATALOGUE} checkout mapped; catalogue validate and verify-sources not run")
         else:
-            for args, label in ((["validate"], "registry validate"),
-                                (["verify-sources", "--remote"], "remote source verification")):
-                rc, out, err = run(["uv", "run", "--quiet", "bouch-registry", *args],
+            mapped = [f"--checkout={k}={v}" for k, v in sorted(ctx["checkouts"].items())]
+            for args, label in ((["validate"], "catalogue validate"),
+                                (["verify-sources", *mapped], "source verification against mapped checkouts")):
+                rc, out, err = run(["uv", "run", "--quiet", CATALOGUE, *args],
                                    cwd=checkout, timeout=600)
                 if rc == 0:
                     r.ok(f"{label} passes")
@@ -558,8 +529,9 @@ def check_isolation(r, ctx, full):
         problems = []
         if HOST_PLUGIN not in plugins:
             problems.append(f"{HOST_PLUGIN} not loaded")
-        if REGISTRY_SERVER not in servers:
-            problems.append(f"{REGISTRY_SERVER} not present")
+        stale = [n for n in servers if n == RETIRED_SERVER or n.endswith(f":{RETIRED_SERVER}")]
+        if stale:
+            problems.append(f"retired MCP server still loads: {stale}")
         if skills & wb_all:
             problems.append(f"workbench Skills present: {sorted(skills & wb_all)}")
         if any(t.split("__")[1] in wb_servers for t in tools if t.startswith("mcp__")):
@@ -571,7 +543,7 @@ def check_isolation(r, ctx, full):
             r.fail(f"neutral session: {'; '.join(problems)}")
         else:
             host_skills = skills
-            r.ok(f"neutral session: {HOST_PLUGIN} and {REGISTRY_SERVER} present, no workbench "
+            r.ok(f"neutral session: {HOST_PLUGIN} present, no retired Registry, workbench "
                  "or domain-plugin capabilities")
 
     for repo, wb in workbenches.items():
@@ -713,8 +685,8 @@ def main():
         prog="bouch-doctor", description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--full", action="store_true",
-                    help="also read every declared entrypoint, run the registry's remote source "
-                         "verification, and probe fresh neutral and workbench sessions (uses API credit)")
+                    help="also read every declared entrypoint, run the catalogue's validate and "
+                         "verify-sources, and probe fresh neutral and workbench sessions (uses API credit)")
     ap.add_argument("--checkout", action="append", default=[], metavar="REPOSITORY=PATH",
                     help=f"where a repository is checked out (repeatable; overrides {CONFIG})")
     ap.add_argument("--config", type=Path, default=CONFIG, help="checkout map file")
@@ -727,7 +699,7 @@ def main():
     checkouts = {k: str(Path(v).expanduser()) for k, v in checkouts.items()}
 
     r = Report()
-    ctx = {"registry": Registry(REGISTRY_URL), "checkouts": checkouts}
+    ctx = {"checkouts": checkouts}
     print(f"bouch-doctor{' --full' if args.full else ''}")
     if not checkouts:
         print(f"  (no checkout map at {args.config}; local project and adapter checks are limited)")

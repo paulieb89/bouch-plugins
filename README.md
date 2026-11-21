@@ -81,7 +81,7 @@ Two independent development plugins, each usable on its own:
 | `bouch-supervision` | Helps a supervisor recover project context, choose whether to work directly or delegate, inspect outcomes and carry work across sessions |
 | `bouch-engineering` | A narrowly triggered evidence-assessment skill (`engineering-evidence`) for coding agents: assess the provenance and strength of evidence before drawing conclusions |
 
-Neither requires `bouch-agent-core` (Core), the BOUCH Registry, Runner, Notion, Eve, an MCP server, or the other plugin. Core and the Registry are optional for both. Install either, both, or neither.
+Neither requires `bouch-agent-core` (Core), the Bouch catalogue, Runner, Notion, Eve, an MCP server, or the other plugin. Core is optional for both. Install either, both, or neither.
 
 ```
 /plugin install bouch-supervision@bouch-plugins
@@ -106,7 +106,7 @@ Reusable guidance (the `character-performance` skill) for developing, voicing, a
 
 Evidence-led game and 3D asset production: the `game-asset-evidence-loop` skill, candidate lineage and bounded repair guidance, templates, and a project-independent close-out validator. Engine-agnostic; the consuming project owns its `/prime`, contract, adapters and runtime harness.
 
-Its README recommends loading it alongside `bouch-agent-core`, which supplies the Registry MCP connection, so that is the setup to use when you want Registry access:
+Its README recommends loading it alongside `bouch-agent-core`, which supplies project routing and the evidence and handoff Skills:
 
 ```
 /plugin install bouch-agent-core@bouch-plugins
@@ -178,14 +178,14 @@ These two appear in both catalogues as external Git sources, are optional, and a
 
 | Plugin | Canonical source | What it is |
 |--------|------------------|------------|
-| `bouch-agent-core` | [paulieb89/bouch-agent-core](https://github.com/paulieb89/bouch-agent-core) | Portable agent-development methodology: harness extension, environment recon, `/prime` authoring, evidence freeze |
+| `bouch-agent-core` | [paulieb89/bouch-agent-core](https://github.com/paulieb89/bouch-agent-core) | Portable Skills for Bouch projects: routing, capability recon and extension, evidence freeze, `/prime` authoring, handoffs, observation logs |
 | `bouch-audio` | [paulieb89/bouch-audio](https://github.com/paulieb89/bouch-audio) | Portable audio production knowledge: electronic production, mixing and mastering, audio verification |
 
 **Historical doctor expectations, not universal requirements.** In the
-Core/Registry architecture that `bouch-doctor` (optional, below) encodes,
+Core architecture that `bouch-doctor` (optional, below) encodes,
 `bouch-agent-core` is the host plugin and is expected user-wide, and
-`bouch-audio` is treated as domain knowledge, reached through the Registry on
-demand or enabled inside the project that needs it. The reasoning was that
+`bouch-audio` is treated as domain knowledge, enabled inside the project that
+needs it. The reasoning was that
 installing domain knowledge user-wide makes every unrelated session carry it,
 and the doctor reports that as a failure (`domain plugins installed
 user-wide`). Neither scope is required of every user or project; follow your
@@ -209,7 +209,7 @@ release it was qualified against. A project that needs that guarantee
 should declare the qualified version in its own contract and check it — see
 `audio-agent-workbench-v2` for a worked example.
 
-**Codex.** The Codex catalogue lists both as external Git root sources pinned by commit. In a fresh isolated Codex environment, the nine-entry local marketplace was discovered and both external plugins installed successfully, as versions 0.2.5 (Core) and 0.2.0 (Audio). In a separate isolated skill probe, the Codex session explicitly read one Core skill (`handoff-authoring`) and one Audio skill (`audio-verification`); this does not show that every Core or Audio skill was exercised. That earlier probe had no Registry tool, so it says nothing about Registry access. A later isolated Codex candidate with a portable `mcp.json` called the live Registry successfully, and Claude called it via its existing manifest. ChatGPT Work Registry integration remains untested. A later isolated Codex installation fetched published Core v0.2.6 from GitHub using the updated marketplace entry and successfully queried the live Registry. A user's own environment may have a separately configured Registry; that is local state outside this repository.
+**Codex.** The Codex catalogue lists both as external Git root sources pinned by commit. In a fresh isolated Codex environment, the nine-entry local marketplace was discovered and both external plugins installed successfully, as versions 0.2.5 (Core) and 0.2.0 (Audio). In a separate isolated skill probe, the Codex session explicitly read one Core skill (`handoff-authoring`) and one Audio skill (`audio-verification`); this does not show that every Core or Audio skill was exercised. That earlier probe had no Registry tool, so it says nothing about Registry access. A later isolated Codex candidate with a portable `mcp.json` called the live Registry successfully, and Claude called it via its existing manifest. ChatGPT Work Registry integration remains untested. A later isolated Codex installation fetched published Core v0.2.6 from GitHub using the updated marketplace entry and successfully queried the live Registry. A user's own environment may have a separately configured Registry; that is local state outside this repository. These Registry results are historical: the hosted Registry MCP service has since been retired.
 
 Verified against Claude Code 2.1.278.
 
@@ -282,19 +282,19 @@ There is no repository-root `LICENSE` file in this checkout. Of the plugins, onl
 
 ## Checking a Bouch host
 
-**Relevant only if you use the Core/Registry architecture.** `doctor/bouch-doctor` is optional. It is not needed for the development plugins, `bouch-character-performance`, `legal-os`, `property` or `foundations`, nor for Codex installs. It matters for Claude Code hosts that use `bouch-agent-core` and the Bouch Registry, which is the setup the `bouch-game-assets` README recommends.
+**Relevant only if you use the Core architecture.** `doctor/bouch-doctor` is optional. It is not needed for the development plugins, `bouch-character-performance`, `legal-os`, `property` or `foundations`, nor for Codex installs. It matters for Claude Code hosts that use `bouch-agent-core`, which is the setup the `bouch-game-assets` README recommends.
 
-It is a read-only check: it writes, installs and repairs nothing, and exits 1 if any check fails. It verifies that a Claude Code host matches the Core/Registry runtime architecture: `bouch-agent-core` and the Bouch Registry MCP server are user-wide, domain knowledge is reached through the Registry on demand, and workbench capabilities stay in their projects. It reads expectations from the `bouch-plugins` marketplace as registered in Claude Code, the live Registry (`registry.bouch.dev`, so it needs network access and that service to be up) and Claude Code itself. The only local input is a checkout map at `~/.config/bouch/doctor.json`.
+It is a read-only check: it writes, installs and repairs nothing, and exits 1 if any check fails. It verifies that a Claude Code host matches the Core runtime architecture: `bouch-agent-core` is the only user-wide Bouch plugin, domain plugins are enabled per project, workbench capabilities stay in their projects, and nothing still connects to the retired Registry MCP service. It reads expectations from the `bouch-plugins` marketplace as registered in Claude Code, the Bouch catalogue (`registry/entries/` on `paulieb89/bouch-registry` `main`, so it needs network access) and Claude Code itself. The only local input is a checkout map at `~/.config/bouch/doctor.json`.
 
 Behaviour to be aware of:
 
 - It fails if the `bouch-plugins` marketplace is not registered or does not list `bouch-agent-core`.
-- It treats every `bouch-plugins` plugin other than `bouch-agent-core` as domain knowledge, and reports an enabled **user-scope** install of one as `domain plugins installed user-wide`. By its logic that covers `bouch-supervision`, `bouch-engineering` and `bouch-game-assets` as well as `bouch-audio`. This encodes the Core/Registry model; it is not a statement that those plugins are defective. If you do not use that model, ignore the check or install project-scoped.
+- It treats every `bouch-plugins` plugin other than `bouch-agent-core` as domain knowledge, and reports an enabled **user-scope** install of one as `domain plugins installed user-wide`. By its logic that covers `bouch-supervision`, `bouch-engineering` and `bouch-game-assets` as well as `bouch-audio`. This encodes the Core model; it is not a statement that those plugins are defective. If you do not use that model, ignore the check or install project-scoped.
 - `--full` starts fresh headless Claude sessions and uses API credit.
 
 ```
-doctor/bouch-doctor          # local state and live Registry, a few seconds
-doctor/bouch-doctor --full   # plus every declared entrypoint, remote source verification
+doctor/bouch-doctor          # local state and the published catalogue, a few seconds
+doctor/bouch-doctor --full   # plus every declared entrypoint, catalogue validate/verify-sources
                              # and fresh neutral/workbench session probes (uses API credit)
 ```
 
@@ -304,10 +304,10 @@ See `doctor/bouch-doctor --help` for the checkout map format.
 
 `doctor/bouch-act` is the optional act layer next to `bouch-doctor`: doctor
 checks what a host already has; `bouch-act` performs the record-to-installed
-hop. It resolves a Registry record (or free-text query) to the concrete
+hop. It resolves a catalogue record (or free-text query) to the concrete
 install commands for each detected harness — Claude Code, Codex and Devin —
 shows them, then applies on confirmation, backing up any config file it
-edits. The remote Registry stays read-only; all acting is local.
+edits. The catalogue stays read-only; all acting is local.
 
 ```
 doctor/bouch-act plan dev.bouch/reaper-mcp   # show the resolved steps, run nothing

@@ -11,7 +11,7 @@ Work with the user to establish the objective, scope and decisions requiring the
 
 - Identify the repository and inspect its instructions, README and existing handoff or current-state documents as relevant — including the observation log (`OBSERVATIONS.md` or its convention) if the project keeps one. Use Git status, diff, history and branches to establish current state; inspect GitHub or native agent sessions when they contain relevant evidence and are accessible. Do not assume the previous conversation is available.
 - Distinguish current observations from dated handoffs, proposals, settled decisions and inferences. A handoff is neither proof of current state nor authorization for new actions. Preserve unrelated work; establish attribution before treating a dirty file as the current agent's change.
-- Discover useful capabilities in the host and project as needed. The BOUCH Registry is an optional catalogue, not a prerequisite. A discovered capability is not proof it is installed, accessible or working.
+- Discover useful capabilities in the host and project as needed. The Bouch catalogue (`bouch-registry` repo) is optional, not a prerequisite. A discovered capability is not proof it is installed, accessible or working.
 
 ## Execute and inspect
 
