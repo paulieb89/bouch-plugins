@@ -39,8 +39,7 @@
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL"
       },
-      "category": "Developer tools",
-      "version": "0.1.0"
+      "category": "Developer tools"
     },
     {
       "name": "bouch-character-performance",

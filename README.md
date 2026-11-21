@@ -96,7 +96,15 @@ Each has a portable root `plugin.json` and a Claude manifest under `.claude-plug
 
 ### bouch-foreman (v0.1.0)
 
-One skill, `foreman-issue`, for repositories built by Foreman (the eve Software Factory). After you and Claude agree a plan in a local session, it writes the plan up as an issue in the shared Factory task form (Problem, Scope, Acceptance criteria, Out of scope) and files it with `gh`, without the `factory` label. It adds the label, which starts a paid run, only when you say so. Install it at project scope in each repository that runs Foreman.
+One skill, `foreman-issue`, for repositories built by Foreman (the eve Software Factory). After you and Claude agree a plan in a local session, it writes the plan up as an issue in the shared Factory task form (Problem, Scope, Acceptance criteria, Out of scope), shows it to you, and files it with `gh` without the `factory` label. It adds the label, which starts a paid run, only when you say so. It has a root `plugin.json`, a Claude manifest and a Codex overlay, and ships no MCP configuration, hooks or agents.
+
+Prerequisite: `gh` signed in with permission to create issues on the target repository (triage permission or higher to label). Install it at project scope in each repository that runs Foreman:
+
+```bash
+claude plugin install bouch-foreman@bouch-plugins --scope project
+```
+
+---
 
 ### bouch-character-performance (v0.1.1)
 
