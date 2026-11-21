@@ -18,8 +18,7 @@ The audit was made against a `bouch-agent-core` checkout newer than the earlier 
 | --- | --- |
 | `handoff-authoring` | Reusable for substantial handoffs; the supervisor includes only the minimal continuity it needs. Keep the detailed template canonical in Core. |
 | `evidence-freeze` | Specialized preservation of verified baselines. Keep in Core; the Engineering skill addresses evaluating and attributing evidence before drawing conclusions, without requiring a freeze. |
-| `environment-recon` | Useful when a capability surface has genuinely drifted; native discovery and a bounded check suffice for ordinary work. |
-| `harness-extension` | Specialized when a real capability gap needs an extension; keep optional in Core. |
+| `capability-gap` | Useful when a capability surface has genuinely drifted or a real gap needs an extension; native discovery and a bounded check suffice for ordinary work. Keep optional in Core. (Merged `environment-recon` and `harness-extension` in Core v0.5.0.) |
 | `prime-authoring` | Useful when authoring an established project-specific prime; not needed for ordinary recovery. |
 | `bouch-project-routing` | Historical assessment, made against the earlier Core: BOUCH orientation with stronger Core/registry framing; do not impose it on these plugins. Core `v0.2.6` is now published and pinned by the catalogue, but this assessment has not been re-made against it. Revisit separately if its own users need current architectural language. |
 

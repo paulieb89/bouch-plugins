@@ -62,10 +62,10 @@
       "source": {
         "source": "github",
         "repo": "paulieb89/bouch-agent-core",
-        "ref": "v0.4.1",
-        "sha": "690f9d2cd106f3ff3469e7fc630316ff59623298"
+        "ref": "v0.5.0",
+        "sha": "ae74c22535873e1f1cf0086c019789c7ea450ac8"
       },
-      "description": "Portable cross-domain agent-development methodology: harness-extension discipline, environment recon, /prime authoring contract, and evidence-freeze practice. Canonical source: paulieb89/bouch-agent-core.",
+      "description": "Portable Skills for Bouch projects: project routing, capability recon and extension, evidence freeze, /prime authoring, handoffs, observation logs and capability install. Canonical source: paulieb89/bouch-agent-core.",
       "author": {
         "name": "Paul Boucherat",
         "email": "paul@bouch.dev"
