@@ -23,9 +23,9 @@ Skills live once under `skills/`; manifests point at them.
 
 | File | Purpose / where present |
 |------|-------------------------|
-| `plugin.json` | Portable manifest ([schema](https://agent-plugins.org/schemas/1.0.0/plugin.schema.json)): supervision, engineering, character-performance, game-assets |
+| `plugin.json` | Portable manifest ([schema](https://agent-plugins.org/schemas/1.0.0/plugin.schema.json)): supervision, engineering, foreman, character-performance, game-assets |
 | `.claude-plugin/plugin.json` | Claude manifest: every local plugin |
-| `.codex-plugin/plugin.json` | Codex overlay (`skills`, `interface`, optional `mcpServers`): supervision, character-performance, foundations, legal-os |
+| `.codex-plugin/plugin.json` | Codex overlay (`skills`, `interface`, optional `mcpServers`): supervision, foreman, character-performance, foundations, legal-os |
 | `.mcp.json` | MCP servers, referenced by `"mcpServers": "./.mcp.json"`: foundations, legal-os, property |
 
 - Keep `name` and `version` aligned across a plugin's manifests and its Claude
