@@ -139,6 +139,13 @@
       "description": "Specialist engineering evidence assessment for native coding agents.",
       "version": "0.2.0",
       "category": "development"
+    },
+    {
+      "name": "bouch-foreman",
+      "source": "./plugins/bouch-foreman",
+      "description": "Hand planned work to Foreman, the eve Software Factory: turn a plan agreed in a local session into a Foreman-ready GitHub issue and file it.",
+      "version": "0.1.0",
+      "category": "development"
     }
   ]
 }

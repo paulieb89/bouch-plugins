@@ -1,0 +1,6 @@
+{
+  "name": "bouch-foreman",
+  "version": "0.1.0",
+  "description": "Hand planned work to Foreman, the eve Software Factory: turn a plan agreed in a local session into a Foreman-ready GitHub issue and file it.",
+  "author": { "name": "Paul Boucherat" }
+}

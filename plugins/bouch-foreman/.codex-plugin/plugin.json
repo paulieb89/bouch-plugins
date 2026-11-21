@@ -1,0 +1,16 @@
+{
+  "name": "bouch-foreman",
+  "version": "0.1.0",
+  "description": "Hand planned work to Foreman, the eve Software Factory: turn a plan agreed in a local session into a Foreman-ready GitHub issue and file it.",
+  "author": {
+    "name": "Paul Boucherat"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "BOUCH Foreman",
+    "shortDescription": "Turn a local plan into a Foreman issue",
+    "longDescription": "Write the spec agreed in a local session as a Foreman-ready GitHub issue (Problem, Scope, Acceptance criteria, Out of scope), file it, and start the run only when asked.",
+    "developerName": "BOUCH",
+    "category": "Developer tools"
+  }
+}

@@ -30,6 +30,19 @@
       "version": "0.2.0"
     },
     {
+      "name": "bouch-foreman",
+      "source": {
+        "source": "local",
+        "path": "./plugins/bouch-foreman"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer tools",
+      "version": "0.1.0"
+    },
+    {
       "name": "bouch-character-performance",
       "source": {
         "source": "local",

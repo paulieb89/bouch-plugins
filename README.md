@@ -11,14 +11,14 @@ A plugin marketplace for BOUCH development plugins, game and character plugins, 
 
 ## Current state of this checkout
 
-This README describes the reconciled marketplace as intended for `main`. Both catalogues pin `bouch-agent-core` (Core) and `bouch-audio` to commits: the Claude entries pin release tags `v0.2.6` and `v0.2.0` plus their commit hashes, while the OpenAI entries pin the matching commit hashes only (Core `df1d28e27c4d466558c9c46b40b5d2ca168c96d2`, Audio `3d94024fad5d5f2a239864e42c3dc2727364d588`). Inspect any existing `bouch-plugins` source on your machine before adding or switching one; an older source may still carry an earlier catalogue.
+This README describes the reconciled marketplace as intended for `main`. Both catalogues pin the external plugins (`bouch-agent-core`, `bouch-audio`, `bouch-web`) to commits: the Claude entries by release tag plus commit hash, the OpenAI entries by commit hash. The catalogues themselves hold the current pins. Inspect any existing `bouch-plugins` source on your machine before adding or switching one; an older source may still carry an earlier catalogue.
 
-Two catalogues live in this repository. They share a name and list the same nine plugins:
+Two catalogues live in this repository. They share a name and list the same eleven plugins:
 
 | Catalogue | File | Entries |
 |-----------|------|---------|
-| OpenAI / Codex | `.agents/plugins/marketplace.json` | Nine entries: seven local (`bouch-supervision`, `bouch-engineering`, `bouch-character-performance`, `foundations`, `property`, `legal-os`, `bouch-game-assets`), plus two externally sourced Git root entries, `bouch-agent-core` (Core) and `bouch-audio`, pinned by commit |
-| Claude Code | `.claude-plugin/marketplace.json` | The same seven local plugins, plus the same two externally sourced entries, `bouch-agent-core` (Core) and `bouch-audio`, pinned by release tag plus commit hash in their own repositories (nine in total) |
+| OpenAI / Codex | `.agents/plugins/marketplace.json` | Eleven entries: eight local (`bouch-supervision`, `bouch-engineering`, `bouch-foreman`, `bouch-character-performance`, `foundations`, `property`, `legal-os`, `bouch-game-assets`), plus three externally sourced Git root entries, `bouch-agent-core` (Core), `bouch-audio` and `bouch-web`, pinned by commit |
+| Claude Code | `.claude-plugin/marketplace.json` | The same eight local plugins, plus the same three externally sourced entries, pinned by release tag plus commit hash in their own repositories (eleven in total) |
 
 Mentions of services below describe what a plugin is configured to use. They do not establish that any service is currently up or reachable.
 
@@ -58,19 +58,21 @@ This marketplace (`bouch-plugins`) provides BOUCH development, game and characte
 
 ## What's in the marketplace
 
-Versions are as in the Claude manifest. `bouch-agent-core` and `bouch-audio` are pinned externally rather than versioned in this repository: the Claude entries by release tag and commit, the OpenAI entries by commit only.
+Versions are as in the Claude manifest. `bouch-agent-core`, `bouch-audio` and `bouch-web` are pinned externally rather than versioned in this repository: the Claude entries by release tag and commit, the OpenAI entries by commit only.
 
 | Plugin | Version | Catalogue | Area |
 |--------|---------|-----------|------|
 | `bouch-supervision` | 0.1.2 | OpenAI + Claude | Development supervision and continuity |
-| `bouch-engineering` | 0.1.0 | OpenAI + Claude | Engineering evidence assessment |
+| `bouch-engineering` | 0.2.0 | OpenAI + Claude | Engineering evidence assessment |
+| `bouch-foreman` | 0.1.0 | OpenAI + Claude | Turn a local plan into a Foreman issue |
 | `bouch-character-performance` | 0.1.1 | OpenAI + Claude | Character design, voice and performance |
 | `bouch-game-assets` | 0.1.1 | OpenAI + Claude | Game and 3D asset evidence loop |
 | `legal-os` | 1.0.0 | OpenAI + Claude | UK legal research |
 | `property` | 1.0.0 | OpenAI + Claude | UK property investment |
 | `foundations` | 1.0.0 | OpenAI + Claude | Ten-skill sampler |
-| `bouch-agent-core` | pin `v0.2.6` | OpenAI + Claude, external | Agent methodology (Core) |
+| `bouch-agent-core` | pin `v0.5.0` | OpenAI + Claude, external | Agent methodology (Core) |
 | `bouch-audio` | pin `v0.2.0` | OpenAI + Claude, external | Audio production knowledge |
+| `bouch-web` | pin `v0.2.0` | OpenAI + Claude, external | Web design knowledge and browser verification |
 
 ### bouch-supervision and bouch-engineering (BOUCH development plugins)
 
@@ -91,6 +93,10 @@ Neither requires `bouch-agent-core` (Core), the Bouch catalogue, Runner, Notion,
 Each has a portable root `plugin.json` and a Claude manifest under `.claude-plugin/`; supervision also keeps a `.codex-plugin/plugin.json` overlay. The evidence-assessment skill is a first experiment; its added value over native agents has not been proven. See [plugins/BOUCH-DEVELOPMENT.md](plugins/BOUCH-DEVELOPMENT.md) for install, validation, the existing-capability audit and verification notes. A cloud copy of supervision was observed in ChatGPT Work and a user reported using it there; neither establishes GitHub sync or import of this repository.
 
 ---
+
+### bouch-foreman (v0.1.0)
+
+One skill, `foreman-issue`, for repositories built by Foreman (the eve Software Factory). After you and Claude agree a plan in a local session, it writes the plan up as an issue in the shared Factory task form (Problem, Scope, Acceptance criteria, Out of scope) and files it with `gh`, without the `factory` label. It adds the label, which starts a paid run, only when you say so. Install it at project scope in each repository that runs Foreman.
 
 ### bouch-character-performance (v0.1.1)
 
@@ -215,15 +221,15 @@ Verified against Claude Code 2.1.278.
 
 ## Directory structure
 
-Reflects this checkout. There are seven local plugin roots under `plugins/`; `bouch-agent-core` and `bouch-audio` live in their own repositories and have no directory here. Skill directories are listed by name only.
+Reflects this checkout. There are eight local plugin roots under `plugins/`; `bouch-agent-core`, `bouch-audio` and `bouch-web` live in their own repositories and have no directory here. Skill directories are listed by name only.
 
 ```
 bouch-plugins/
 ├── README.md
 ├── AGENTS.md                         ← short agent guidance
 ├── DEVELOPMENT.md                    ← maintainer workflow
-├── .agents/plugins/marketplace.json  ← OpenAI/Codex catalogue (9 entries)
-├── .claude-plugin/marketplace.json   ← Claude catalogue (9 entries)
+├── .agents/plugins/marketplace.json  ← OpenAI/Codex catalogue (11 entries)
+├── .claude-plugin/marketplace.json   ← Claude catalogue (11 entries)
 ├── doctor/bouch-doctor               ← optional host-architecture check
 ├── doctor/bouch-act                  ← optional act layer: record → install plan → apply
 ├── guide/                            ← BOUCH Skills Guide (md + pdf, own LICENSE.txt)
@@ -238,6 +244,11 @@ bouch-plugins/
     │   ├── plugin.json
     │   ├── .claude-plugin/plugin.json
     │   └── skills/engineering-evidence/
+    ├── bouch-foreman/
+    │   ├── plugin.json
+    │   ├── .claude-plugin/plugin.json
+    │   ├── .codex-plugin/plugin.json
+    │   └── skills/foreman-issue/
     ├── bouch-character-performance/
     │   ├── plugin.json
     │   ├── .claude-plugin/plugin.json
